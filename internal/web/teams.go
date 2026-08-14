@@ -33,22 +33,25 @@ type teamMemberView struct {
 }
 
 type teamDetailView struct {
-	ID          int64
-	JamID       int64
-	Name        string
-	Description string
-	AvatarPath  string
-	CaptainID   int64
-	CaptainName string
-	MemberCount int
-	Members     []teamMemberView
-	Eligible    bool
-	InvitePath  string
-	InviteLive  bool
-	IsMember    bool
-	IsCaptain   bool
-	CanManage   bool
-	CanLeave    bool
+	ID             int64
+	JamID          int64
+	Name           string
+	Description    string
+	AvatarPath     string
+	CaptainID      int64
+	CaptainName    string
+	MemberCount    int
+	Members        []teamMemberView
+	Eligible       bool
+	InvitePath     string
+	InviteLive     bool
+	IsMember       bool
+	IsCaptain      bool
+	CanManage      bool
+	CanLeave       bool
+	ThemePhrase    string
+	CanEditProduct bool
+	ProductID      int64
 }
 
 type teamPageView struct {
@@ -237,8 +240,11 @@ func (a *App) teamDetail(c *gin.Context) {
 	}
 	stage := EffectiveStage(schedule, time.Now())
 	user := CurrentUser(c)
+	var viewerProductEditor bool
 	if user != nil {
-		err = a.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2)`, teamID, user.ID).Scan(&view.IsMember)
+		err = a.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM team_members WHERE team_id=$1 AND user_id=$2),
+			       COALESCE((SELECT is_product_editor FROM team_members WHERE team_id=$1 AND user_id=$2), false)`, teamID, user.ID).Scan(&view.IsMember, &viewerProductEditor)
 		if err != nil {
 			a.logger.Error("load team viewer membership", "error", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -248,6 +254,30 @@ func (a *App) teamDetail(c *gin.Context) {
 	view.IsCaptain = user != nil && user.ID == view.CaptainID && view.IsMember
 	view.CanManage = view.IsCaptain && CanManageTeam(stage)
 	view.CanLeave = view.IsMember && !view.IsCaptain && CanManageTeam(stage)
+	view.CanEditProduct = stage == StageSubmission && view.IsMember && (view.IsCaptain || viewerProductEditor)
+	if canDiscloseProducts(stage) {
+		err = a.pool.QueryRow(ctx, `SELECT id FROM products WHERE team_id=$1 AND jam_id=$2 AND status='final'`, teamID, view.JamID).Scan(&view.ProductID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			a.logger.Error("load disclosed team product", "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+	}
+	if canDiscloseTeamTheme(stage, view.IsMember) {
+		var phrase string
+		err = a.pool.QueryRow(ctx, `
+			SELECT theme.phrase FROM team_theme_selections selection
+			JOIN jam_themes theme ON theme.id=selection.theme_id
+			WHERE selection.team_id=$1`, teamID).Scan(&phrase)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			a.logger.Error("load disclosed team theme", "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		if err == nil {
+			view.ThemePhrase = phrase
+		}
+	}
 
 	if view.IsMember {
 		err = a.pool.QueryRow(ctx, `
@@ -784,6 +814,10 @@ func teamLock(ctx context.Context, tx pgx.Tx, teamID int64) (teamLockedRecord, e
 }
 
 func teamManageable(team teamLockedRecord) bool {
+	return CanManageTeam(teamEffectiveStage(team))
+}
+
+func teamEffectiveStage(team teamLockedRecord) Stage {
 	schedule := Schedule{
 		SubmissionStartsAt: team.SubmissionStartsAt,
 		EvaluationStartsAt: team.EvaluationStartsAt,
@@ -794,7 +828,7 @@ func teamManageable(team teamLockedRecord) bool {
 		stage := Stage(*team.Override)
 		schedule.Override = &stage
 	}
-	return CanManageTeam(EffectiveStage(schedule, time.Now()))
+	return EffectiveStage(schedule, time.Now())
 }
 
 func (a *App) teamStoreAvatar(c *gin.Context) (string, bool, error) {

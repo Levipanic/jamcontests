@@ -56,6 +56,23 @@
           <p>{{.Jam.Rules}}</p>
         </details>
         {{end}}
+
+        {{if ne .Jam.Stage "upcoming"}}
+        <section aria-labelledby="themes-title">
+          <p class="eyebrow">Материалы дела</p><h2 id="themes-title">Темы</h2>
+          {{if .ThemeConfigError}}<p class="alert" role="alert">Критическая ошибка конфигурации: для текущей стадии нет активных тем. Выбор темы и финальная сдача заблокированы.</p>{{end}}
+          {{if .Themes}}<ul>{{range .Themes}}<li>{{.Phrase}}</li>{{end}}</ul>{{end}}
+          {{if and .SelectedTheme .Profile}}<p>Тема вашей команды: <strong>{{.SelectedTheme.Phrase}}</strong></p>{{end}}
+          {{if and (eq .Jam.Stage "submission") .Profile .Profile.IsCaptain}}
+            {{if .Profile.Eligible}}
+              {{if .Themes}}<form method="post" action="/teams/{{.Profile.TeamID}}/theme" class="paper-form"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Тема команды<select name="theme_id" required><option value="">Выберите тему</option>{{range .Themes}}<option value="{{.ID}}" {{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}}selected{{end}}>{{.Phrase}}</option>{{end}}</select></label><button type="submit">{{if .SelectedTheme}}Изменить тему{{else}}Выбрать тему{{end}}</button></form>{{end}}
+            {{else}}<p class="section-note">Выбор темы станет доступен после получения командой допуска.</p>{{end}}
+          {{end}}
+        </section>
+        {{end}}
+        {{if or (eq .Jam.Stage "evaluation") (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
+        <p><a class="action secondary" href="/jams/{{.Jam.ID}}/products">Продукты джема</a></p>
+        {{end}}
       {{else}}
         <div class="empty-case">
           <p class="eyebrow">Архивная отметка</p>

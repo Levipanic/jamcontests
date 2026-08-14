@@ -29,6 +29,7 @@ type ProfileView struct {
 	TeamRole            string
 	QuestionnaireStatus string
 	Eligible            bool
+	IsCaptain           bool
 }
 
 func (a *App) populateHome(c *gin.Context, data *PageData) error {
@@ -44,6 +45,14 @@ func (a *App) populateHome(c *gin.Context, data *PageData) error {
 			return err
 		}
 		data.Teams = teams
+		if StageAtLeast(jam.Stage, StageSubmission) {
+			themes, err := a.loadActiveThemes(c.Request.Context(), jam.ID)
+			if err != nil {
+				return err
+			}
+			data.Themes = themes
+			data.ThemeConfigError = len(themes) == 0
+		}
 	}
 	if data.User != nil {
 		profile, err := a.loadProfile(c.Request.Context(), data.User, jam)
@@ -51,6 +60,13 @@ func (a *App) populateHome(c *gin.Context, data *PageData) error {
 			return err
 		}
 		data.Profile = profile
+		if jam != nil && StageAtLeast(jam.Stage, StageSubmission) && profile.TeamID != 0 {
+			selected, err := a.loadTeamTheme(c.Request.Context(), profile.TeamID)
+			if err != nil {
+				return err
+			}
+			data.SelectedTheme = selected
+		}
 	}
 	return nil
 }
@@ -127,8 +143,38 @@ func (a *App) loadProfile(ctx context.Context, user *User, jam *JamView) (*Profi
 	profile.TeamRole = "участник"
 	if captainID == user.ID {
 		profile.TeamRole = "капитан"
+		profile.IsCaptain = true
 	}
 	return profile, nil
+}
+
+func (a *App) loadActiveThemes(ctx context.Context, jamID int64) ([]ThemeView, error) {
+	rows, err := a.pool.Query(ctx, `SELECT id, phrase FROM jam_themes WHERE jam_id=$1 AND withdrawn_at IS NULL ORDER BY created_at, id`, jamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var themes []ThemeView
+	for rows.Next() {
+		var theme ThemeView
+		if err := rows.Scan(&theme.ID, &theme.Phrase); err != nil {
+			return nil, err
+		}
+		themes = append(themes, theme)
+	}
+	return themes, rows.Err()
+}
+
+func (a *App) loadTeamTheme(ctx context.Context, teamID int64) (*ThemeView, error) {
+	var theme ThemeView
+	err := a.pool.QueryRow(ctx, `SELECT t.id, t.phrase FROM team_theme_selections s JOIN jam_themes t ON t.id=s.theme_id WHERE s.team_id=$1`, teamID).Scan(&theme.ID, &theme.Phrase)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &theme, nil
 }
 
 func (a *App) updateProfile(c *gin.Context) {

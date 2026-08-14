@@ -1,0 +1,14 @@
+{{define "product_detail.html"}}
+<!doctype html><html lang="ru"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer">
+  <title>{{.Product.Title}}</title><link rel="stylesheet" href="/static/css/app.css">
+</head><body><main class="dossier">
+  <article><p class="eyebrow">Раскрытый продукт / № {{.Product.ID}}</p><h1>{{.Product.Title}}</h1>
+    <dl><dt>Команда</dt><dd><a href="/teams/{{.Product.TeamID}}">{{.Product.TeamName}}</a></dd><dt>Тема</dt><dd>{{.Product.Theme}}</dd></dl>
+  </article>
+  {{if .Product.Description}}<section><h2>Описание</h2><p class="product-copy">{{.Product.Description}}</p></section>{{end}}
+  <section><h2>Внешние материалы</h2><p><a class="action" href="{{.Product.ResultURL}}" target="_blank" rel="noopener noreferrer nofollow">Открыть результат</a></p>
+    {{if .Product.CommentaryURL}}<p><a href="{{.Product.CommentaryURL}}" target="_blank" rel="noopener noreferrer nofollow">Комментарий или разбор</a></p>{{end}}
+  </section>
+  <p><a href="/jams/{{.Product.JamID}}/products">Все продукты джема</a></p>
+</main></body></html>{{end}}

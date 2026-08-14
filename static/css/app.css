@@ -240,6 +240,10 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .dossier img { max-width: 100%; object-fit: cover; filter: grayscale(.5); }
 .dossier li { margin: .8rem 0; }
 .dossier li form { display: inline-block; margin: .25rem; }
+.product-copy { white-space: pre-wrap; line-height: 1.65; }
+.product-index { display: grid; gap: 1.2rem; }
+.product-index > article { padding: 1.2rem; border: 1px solid var(--line); background: #f2e9d8; }
+.product-index h2 { margin-top: 0; }
 
 @media (max-width: 760px) {
   .site-mark { position: absolute; }

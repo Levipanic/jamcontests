@@ -47,3 +47,12 @@ func TestEffectiveStageOverride(t *testing.T) {
 		t.Fatalf("got %s, want voting", got)
 	}
 }
+
+func TestStageAtLeast(t *testing.T) {
+	if StageAtLeast(StageUpcoming, StageSubmission) {
+		t.Fatal("upcoming must be before submission")
+	}
+	if !StageAtLeast(StageSubmission, StageSubmission) || !StageAtLeast(StageFinished, StageSubmission) {
+		t.Fatal("submission and later stages must satisfy comparison")
+	}
+}

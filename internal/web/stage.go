@@ -58,3 +58,7 @@ func NextBoundary(schedule Schedule, stage Stage) *time.Time {
 func CanManageTeam(stage Stage) bool {
 	return stage == StageUpcoming || stage == StageSubmission
 }
+
+func StageAtLeast(stage, minimum Stage) bool {
+	return stageIndex(stage) >= stageIndex(minimum)
+}

@@ -22,8 +22,11 @@
       <dl>
         <dt>Капитан</dt><dd>{{.Team.CaptainName}}</dd>
         <dt>Участников</dt><dd>{{.Team.MemberCount}}</dd>
+        {{if .Team.ThemePhrase}}<dt>Тема</dt><dd>{{.Team.ThemePhrase}}</dd>{{end}}
         {{if .Team.IsMember}}<dt>Допуск команды</dt><dd>{{if .Team.Eligible}}подтверждён{{else}}не подтверждён{{end}}</dd>{{end}}
       </dl>
+      {{if .Team.CanEditProduct}}<p><a class="action" href="/jams/{{.Team.JamID}}/product">Редактировать продукт команды</a></p>{{end}}
+      {{if .Team.ProductID}}<p><a class="action secondary" href="/products/{{.Team.ProductID}}">Открыть сданный продукт</a></p>{{end}}
       <h2>Состав</h2>
       <ul>
         {{range .Team.Members}}

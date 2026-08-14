@@ -81,11 +81,15 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
-		checksum := sha256.Sum256(body)
+		// Git may check out text migrations with CRLF on Windows. Hash canonical
+		// LF bytes so an unchanged migration keeps the same checksum everywhere.
+		canonicalBody := bytes.ReplaceAll(body, []byte("\r\n"), []byte("\n"))
+		checksum := sha256.Sum256(canonicalBody)
+		crlfChecksum := sha256.Sum256(bytes.ReplaceAll(canonicalBody, []byte("\n"), []byte("\r\n")))
 		var appliedChecksum []byte
 		err = conn.QueryRow(ctx, `SELECT checksum FROM schema_migrations WHERE name = $1`, name).Scan(&appliedChecksum)
 		if err == nil {
-			if !bytes.Equal(appliedChecksum, checksum[:]) {
+			if !bytes.Equal(appliedChecksum, checksum[:]) && !bytes.Equal(appliedChecksum, crlfChecksum[:]) {
 				return fmt.Errorf("migration %s changed after it was applied", name)
 			}
 			continue

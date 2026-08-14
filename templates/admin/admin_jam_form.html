@@ -29,14 +29,14 @@
 </form>
 </main>
 {{if .Jam}}
-<section><h2>Анкета</h2><p><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Открыть конструктор вопросов</a></p></section>
+<section><h2>Материалы</h2><p><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Открыть конструктор вопросов</a></p><p><a href="/admin/jams/{{.Jam.ID}}/themes">Управлять темами</a></p><p><a href="/admin/jams/{{.Jam.ID}}/products">Модерировать продукты</a></p></section>
 <section class="danger"><h2>Видимость и стадия</h2><p>Все действия требуют отдельного обоснования. Hard delete отсутствует.</p>
 {{if eq .Jam.Visibility "draft"}}
 <form method="post" action="/admin/jams/{{.Jam.ID}}/publish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Опубликовать</button></form>
 {{else}}
 <form method="post" action="/admin/jams/{{.Jam.ID}}/unpublish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина снятия с публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Снять с публикации</button></form>
 {{end}}
-<form method="post" action="/admin/jams/{{.Jam.ID}}/override"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="stage" value="upcoming"><label>Причина override upcoming <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Установить upcoming</button></form>
+<form method="post" action="/admin/jams/{{.Jam.ID}}/override"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Явная стадия <select name="stage" required><option value="upcoming">upcoming</option><option value="submission">submission</option><option value="evaluation">evaluation</option><option value="voting">voting</option><option value="finished">finished</option></select></label><label>Причина override <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Установить override</button></form>
 <form method="post" action="/admin/jams/{{.Jam.ID}}/auto"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина возврата в auto <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Вернуть автоматическую стадию</button></form>
 </section>
 {{end}}

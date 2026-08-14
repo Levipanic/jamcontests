@@ -1,0 +1,25 @@
+{{define "admin_products.html"}}
+<!doctype html><html lang="ru"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer">
+  <title>Продукты — {{.Jam.Title}}</title><link rel="stylesheet" href="/static/css/app.css">
+</head><body><main class="dossier admin-shell">
+  <article><p class="eyebrow">Администрирование / джем № {{.Jam.ID}}</p><h1>Продукты</h1><p>{{.Jam.Title}}</p>
+    {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  </article>
+  {{if .Products}}{{range .Products}}<section><p class="eyebrow">Продукт № {{.ID}} / команда № {{.TeamID}}</p><h2>{{.TeamName}}</h2>
+    <form method="post" action="/admin/jams/{{$.Jam.ID}}/products/{{.ID}}/update">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <label>Название<input name="title" value="{{.Title}}" maxlength="200"></label>
+      <label>Внешняя ссылка на результат<input name="result_url" value="{{.ResultURL}}" maxlength="2048"></label>
+      <label>Описание<textarea name="description" maxlength="5000" rows="7">{{.Description}}</textarea></label>
+      <label>Внешняя ссылка на комментарий<input name="commentary_url" value="{{.CommentaryURL}}" maxlength="2048"></label>
+      <label>Внутренние заметки<textarea name="notes" maxlength="5000" rows="5">{{.Notes}}</textarea></label>
+      <label>Статус<select name="status"><option value="draft"{{if eq .Status "draft"}} selected{{end}}>Черновик</option><option value="final"{{if eq .Status "final"}} selected{{end}}>Финально сдан</option></select></label>
+      <label><input type="checkbox" name="confirm_status_change" value="yes"> Подтверждаю изменение статуса, если он выбран иначе</label>
+      <label><input type="checkbox" name="confirm_post_reveal" value="yes"> Подтверждаю изменение уже раскрытого продукта</label>
+      <label>Причина вмешательства<textarea name="reason" required maxlength="1000" rows="3"></textarea></label>
+      <button class="danger" type="submit">Применить модерацию</button>
+    </form>
+  </section>{{end}}{{else}}<section><p>Карточек продуктов пока нет.</p></section>{{end}}
+  <p><a href="/admin/jams/{{.Jam.ID}}/edit">Вернуться к джему</a></p>
+</main></body></html>{{end}}

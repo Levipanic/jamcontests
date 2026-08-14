@@ -33,18 +33,21 @@ type App struct {
 }
 
 type PageData struct {
-	User         *User
-	CSRFToken    string
-	Error        string
-	AuthOpen     bool
-	AuthMode     string
-	AuthUsername string
-	AuthEmail    string
-	Next         string
-	Jam          *JamView
-	Teams        []HomeTeamView
-	Profile      *ProfileView
-	ProfileError string
+	User             *User
+	CSRFToken        string
+	Error            string
+	AuthOpen         bool
+	AuthMode         string
+	AuthUsername     string
+	AuthEmail        string
+	Next             string
+	Jam              *JamView
+	Teams            []HomeTeamView
+	Profile          *ProfileView
+	ProfileError     string
+	Themes           []ThemeView
+	SelectedTheme    *ThemeView
+	ThemeConfigError bool
 }
 
 type JamView struct {
@@ -102,6 +105,8 @@ func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *gin.Engine
 	app.registerAdminControlRoutes(router)
 	app.registerTeamRoutes(router)
 	app.registerQuestionnaireRoutes(router)
+	app.registerThemeRoutes(router)
+	app.registerProductRoutes(router)
 
 	return router
 }

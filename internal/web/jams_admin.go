@@ -303,9 +303,18 @@ func (a *App) updateJamAdmin(c *gin.Context) {
 	}
 	scheduleChanged := !sameSchedule(before.Schedule, values.Schedule)
 	if scheduleChanged {
-		if EffectiveStage(values.Schedule, time.Now()) != StageUpcoming {
-			a.renderJamEditError(c, jamID, form, "Пока темы не реализованы, новое расписание должно оставлять джем на стадии upcoming.")
-			return
+		resultingSchedule := values.Schedule
+		resultingSchedule.Override = before.Schedule.Override
+		if StageAtLeast(EffectiveStage(resultingSchedule, time.Now()), StageSubmission) {
+			hasTheme, themeErr := hasActiveTheme(c.Request.Context(), tx, jamID)
+			if themeErr != nil {
+				a.jamAdminFailure(c, "check themes during schedule update", themeErr)
+				return
+			}
+			if !hasTheme {
+				a.renderJamEditError(c, jamID, form, "Для расписания, переводящего джем в submission или позже, нужна хотя бы одна активная тема.")
+				return
+			}
 		}
 		if before.Visibility == "published" {
 			active, checkErr := hasOtherActivePublishedJam(c.Request.Context(), tx, jamID, time.Now())
@@ -385,7 +394,7 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 			return
 		}
 		if EffectiveStage(jam.Schedule, time.Now()) != StageUpcoming {
-			a.renderJamActionError(c, jamID, "Пока темы не реализованы, публиковать можно только джем на стадии upcoming.")
+			a.renderJamActionError(c, jamID, "Публиковать можно только джем на стадии upcoming.")
 			return
 		}
 		active, checkErr := hasOtherActivePublishedJam(c.Request.Context(), tx, jamID, time.Now())
@@ -421,10 +430,10 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 
 func (a *App) overrideJamAdmin(c *gin.Context) {
 	stage := Stage(strings.TrimSpace(c.PostForm("stage")))
-	if stage != StageUpcoming {
+	if stage != StageUpcoming && stage != StageSubmission && stage != StageEvaluation && stage != StageVoting && stage != StageFinished {
 		jamID, ok := adminID(c, "id")
 		if ok {
-			a.renderJamActionError(c, jamID, "Пока темы не реализованы, разрешён только override upcoming.")
+			a.renderJamActionError(c, jamID, "Выберите допустимую стадию.")
 		}
 		return
 	}
@@ -466,6 +475,17 @@ func (a *App) setJamOverride(c *gin.Context, override *Stage) {
 	}
 	resulting := jam.Schedule
 	resulting.Override = override
+	if StageAtLeast(EffectiveStage(resulting, time.Now()), StageSubmission) {
+		hasTheme, themeErr := hasActiveTheme(c.Request.Context(), tx, jamID)
+		if themeErr != nil {
+			a.jamAdminFailure(c, "check themes before stage change", themeErr)
+			return
+		}
+		if !hasTheme {
+			a.renderJamActionError(c, jamID, "Для стадии submission или позже нужна хотя бы одна активная тема.")
+			return
+		}
+	}
 	if jam.Visibility == "published" && EffectiveStage(resulting, time.Now()) != StageFinished {
 		active, checkErr := hasOtherActivePublishedJam(c.Request.Context(), tx, jamID, time.Now())
 		if checkErr != nil {
