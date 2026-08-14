@@ -1,7 +1,7 @@
 {{define "admin_audit.html"}}<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Аудит | Администрирование</title>
-<style>body{max-width:90rem;margin:2rem auto;padding:0 1rem;font:16px/1.45 Georgia,serif;color:#211;background:#f2eee4}header,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.2rem;margin-bottom:1rem}nav a{margin-right:1rem;color:#741d1d}table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;vertical-align:top;padding:.5rem;border-bottom:1px solid #ddd}pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.35 monospace}.error{color:#8d1111;font-weight:bold}</style>
+<link rel="stylesheet" href="/static/css/font.css"><style>body{max-width:90rem;margin:2rem auto;padding:0 1rem;font:16px/1.45 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}header,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.2rem;margin-bottom:1rem}nav a{margin-right:1rem;color:#741d1d}table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;vertical-align:top;padding:.5rem;border-bottom:1px solid #ddd}pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.35 "Cutive Mono","Courier New",monospace}.error{color:#8d1111;font-weight:bold}</style>
 </head><body>
 <header><h1>Журнал аудита</h1><nav><a href="/admin">Джемы</a><a href="/admin/users">Пользователи</a><a href="/admin/teams">Команды</a><a href="/admin/audit">Аудит</a></nav></header>
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}

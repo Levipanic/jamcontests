@@ -6,13 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{.CSRFToken}}">
   <title>Анкета участника — {{.JamTitle}}</title>
+  <link rel="stylesheet" href="/static/css/font.css">
   <script src="/static/js/questionnaire.js" defer></script>
   <style>
-    :root { color-scheme: light; font-family: Georgia, serif; background: #191817; color: #25211d; }
+    :root { color-scheme: light; font-family: "Cutive Mono", "Courier New", monospace; background: #191817; color: #25211d; }
     body { margin: 0; padding: 2rem 1rem; background: #191817; }
     main { max-width: 780px; margin: 0 auto; padding: clamp(1.25rem, 4vw, 3rem); background: #eee7d8; box-shadow: 0 1rem 4rem #0008; }
-    h1, legend { font-family: "Courier New", monospace; }
-    .eyebrow, .status { font: 700 .78rem/1.4 "Courier New", monospace; text-transform: uppercase; letter-spacing: .09em; }
+    h1, legend { font-family: "Cutive Mono", "Courier New", monospace; }
+    .eyebrow, .status { font: 700 .78rem/1.4 "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .09em; }
     .notice, .error, .readonly { padding: .8rem 1rem; border-left: .3rem solid #8e241d; background: #fff9; }
     .error { color: #72170f; }
     fieldset { margin: 1.5rem 0; padding: 1.25rem; border: 1px solid #a99e8b; }
@@ -22,11 +23,11 @@
     .hint { color: #625a50; }
     .question-status { min-height: 1.2em; color: #625a50; font-size: .9rem; }
     .question-status[data-kind="error"] { color: #8e241d; }
-    button { padding: .75rem 1.1rem; border: 0; background: #8e241d; color: white; font: 700 .9rem "Courier New", monospace; cursor: pointer; }
+    button { padding: .75rem 1.1rem; border: 0; background: #8e241d; color: white; font: 700 .9rem "Cutive Mono", "Courier New", monospace; cursor: pointer; }
     button:disabled { cursor: wait; opacity: .6; }
     aside { margin-top: 2.5rem; padding-top: 1rem; border-top: 2px solid #25211d; }
     .members { padding-left: 1.2rem; }
-    .members span { font-family: "Courier New", monospace; }
+    .members span { font-family: "Cutive Mono", "Courier New", monospace; }
     a { color: #72170f; }
   </style>
 </head>

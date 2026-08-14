@@ -1,7 +1,7 @@
 {{define "admin_questionnaire.html"}}<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Анкета | {{.Jam.Title}}</title><style>
-body{max-width:62rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 Georgia,serif;color:#211;background:#f2eee4}main,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}label{display:block;margin:.8rem 0}input,textarea,select{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}textarea{min-height:5rem}.inline{width:auto}.error,.warning{color:#8d1111;font-weight:bold}.question{border-left:4px solid #777;padding-left:1rem}.danger{color:#8d1111}
+<title>Анкета | {{.Jam.Title}}</title><link rel="stylesheet" href="/static/css/font.css"><style>
+body{max-width:62rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}main,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}label{display:block;margin:.8rem 0}input,textarea,select{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}textarea{min-height:5rem}.inline{width:auto}.error,.warning{color:#8d1111;font-weight:bold}.question{border-left:4px solid #777;padding-left:1rem}.danger{color:#8d1111}
 </style></head><body>
 <p><a href="/admin/jams/{{.Jam.ID}}/edit">← К джему</a></p><main><h1>Анкета: {{.Jam.Title}}</h1><p>Вопросов: {{.Jam.QuestionCount}}. Структурные изменения доступны только у draft-джема до первого сохранённого ответа.</p>
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}{{if .QuestionnaireLocked}}<p class="warning">Конструктор заблокирован: джем уже опубликован или существует сохранённый ответ.</p>{{end}}</main>
