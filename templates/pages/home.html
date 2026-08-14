@@ -17,11 +17,10 @@
   </nav>
 
   <header class="site-mark">
-    <a href="/" aria-label="Главная">АРХИВ / JC</a>
     {{if .User}}
-      <span class="identity-mark">{{.User.Username}}</span>
+      <span class="identity-mark">Личное дело: {{.User.Username}}</span>
     {{else}}
-      <button class="text-button" type="button" data-open-auth="login">Открыть личное дело</button>
+      <button class="text-button" type="button" data-open-auth="login">Войти / зарегистрироваться</button>
     {{end}}
   </header>
 
@@ -78,6 +77,10 @@
           {{else}}
             {{if or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")}}<a class="action" href="/login?next=/jams/{{.Jam.ID}}/teams/new" data-auth-required data-next="/jams/{{.Jam.ID}}/teams/new">Создать команду</a>{{end}}
           {{end}}
+          {{if and .User (not .Profile)}}<p class="section-note">Не удалось определить членство. Обновите страницу.</p>{{end}}
+          {{if and .User .Profile (eq .Profile.TeamID 0) (not (or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")))}}<p class="section-note">Создание команд закрыто на текущей стадии.</p>{{end}}
+        {{else}}
+          <p class="section-note">Создать команду можно после публикации активного джема.</p>
         {{end}}
       </div>
 

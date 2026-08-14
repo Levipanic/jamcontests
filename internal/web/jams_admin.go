@@ -84,6 +84,7 @@ type jamAdminPageData struct {
 	EditingQuestion     bool
 	QuestionnaireLocked bool
 	MoscowZone          string
+	Development         bool
 }
 
 // registerJamAdminRoutes installs the jam administration surface. The caller
@@ -91,6 +92,7 @@ type jamAdminPageData struct {
 func (a *App) registerJamAdminRoutes(router *gin.Engine) {
 	admin := router.Group("/admin", RequireAdmin())
 	admin.GET("", a.jamAdminDashboard)
+	admin.POST("/demo", a.createDemoJamAdmin)
 	admin.GET("/jams/new", a.newJamAdminPage)
 	admin.POST("/jams/new", a.createJamAdmin)
 	admin.GET("/jams/:id/edit", a.editJamAdminPage)
@@ -113,12 +115,96 @@ func (a *App) jamAdminDashboard(c *gin.Context) {
 		a.renderJamAdmin(c, http.StatusInternalServerError, "admin_jams.html", jamAdminPageData{PageData: PageData{Error: "Не удалось загрузить джемы."}})
 		return
 	}
-	a.renderJamAdmin(c, http.StatusOK, "admin_jams.html", jamAdminPageData{Jams: jams})
+	a.renderJamAdmin(c, http.StatusOK, "admin_jams.html", jamAdminPageData{Jams: jams, Development: !a.config.Production(), PageData: PageData{Error: c.Query("error")}})
 }
 
 func (a *App) newJamAdminPage(c *gin.Context) {
-	form := adminJamForm{MaxTeamSize: "5"}
+	form := defaultAdminJamForm(time.Now())
 	a.renderJamAdmin(c, http.StatusOK, "admin_jam_form.html", jamAdminPageData{JamForm: form, MoscowZone: "Europe/Moscow"})
+}
+
+func defaultAdminJamForm(now time.Time) adminJamForm {
+	location, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		location = time.FixedZone("Europe/Moscow", 3*60*60)
+	}
+	format := func(value time.Time) string { return value.In(location).Format("2006-01-02T15:04") }
+	submission := now.Add(7 * 24 * time.Hour)
+	return adminJamForm{
+		SubmissionStarts: format(submission),
+		EvaluationStarts: format(submission.Add(7 * 24 * time.Hour)),
+		VotingStarts:     format(submission.Add(9 * 24 * time.Hour)),
+		Finishes:         format(submission.Add(11 * 24 * time.Hour)),
+		MaxTeamSize:      "5",
+		Reason:           "Создание нового джема",
+	}
+}
+
+func (a *App) createDemoJamAdmin(c *gin.Context) {
+	if a.config.Production() {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	now := time.Now()
+	schedule := Schedule{
+		SubmissionStartsAt: now.Add(7 * 24 * time.Hour),
+		EvaluationStartsAt: now.Add(14 * 24 * time.Hour),
+		VotingStartsAt:     now.Add(16 * 24 * time.Hour),
+		FinishesAt:         now.Add(18 * 24 * time.Hour),
+	}
+	tx, err := a.pool.Begin(c.Request.Context())
+	if err != nil {
+		a.jamAdminFailure(c, "begin demo jam creation", err)
+		return
+	}
+	defer tx.Rollback(c.Request.Context())
+	if _, err = tx.Exec(c.Request.Context(), `SELECT pg_advisory_xact_lock($1)`, jamLifecycleLock); err != nil {
+		a.jamAdminFailure(c, "lock demo jam lifecycle", err)
+		return
+	}
+	active, err := hasOtherActivePublishedJam(c.Request.Context(), tx, 0, now)
+	if err != nil {
+		a.jamAdminFailure(c, "check demo active jam", err)
+		return
+	}
+	if active {
+		c.Redirect(http.StatusSeeOther, "/admin?error="+urlQueryEscape("Уже существует опубликованный активный джем."))
+		return
+	}
+	var jamID int64
+	err = tx.QueryRow(c.Request.Context(), `
+		INSERT INTO jams (title, description, rules, visibility, submission_starts_at,
+		                  evaluation_starts_at, voting_starts_at, finishes_at, max_team_size)
+		VALUES ('Тестовое дело', 'Проверка командной платформы перед настоящим джемом.',
+		        'Создайте команду, пригласите участника и завершите тестовую анкету.', 'published',
+		        $1, $2, $3, $4, 5) RETURNING id`,
+		schedule.SubmissionStartsAt, schedule.EvaluationStartsAt, schedule.VotingStartsAt, schedule.FinishesAt).Scan(&jamID)
+	if err != nil {
+		a.jamAdminFailure(c, "insert demo jam", err)
+		return
+	}
+	var questionnaireID int64
+	if err = tx.QueryRow(c.Request.Context(), `INSERT INTO questionnaires (jam_id) VALUES ($1) RETURNING id`, jamID).Scan(&questionnaireID); err != nil {
+		a.jamAdminFailure(c, "insert demo questionnaire", err)
+		return
+	}
+	if _, err = tx.Exec(c.Request.Context(), `
+		INSERT INTO questionnaire_questions (questionnaire_id, type, prompt, hint, required, text_limit, position)
+		VALUES ($1, 'short_text', 'Что вы хотите попробовать на этом джеме?',
+		        'Короткий тестовый ответ', true, 500, 0)`, questionnaireID); err != nil {
+		a.jamAdminFailure(c, "insert demo question", err)
+		return
+	}
+	after := map[string]any{"id": jamID, "title": "Тестовое дело", "visibility": "published", "demo": true}
+	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), "jam.demo_create", "jam", jamID, "Создание тестового джема в development", nil, after); err != nil {
+		a.jamAdminFailure(c, "audit demo jam", err)
+		return
+	}
+	if err = tx.Commit(c.Request.Context()); err != nil {
+		a.jamAdminFailure(c, "commit demo jam", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (a *App) createJamAdmin(c *gin.Context) {
