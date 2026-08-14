@@ -1,0 +1,36 @@
+{{define "team_new.html"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+  <meta name="referrer" content="no-referrer">
+  <title>Новое дело: команда</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <main class="dossier">
+    <header>
+      <p>Джем № {{.JamID}}</p>
+      <h1>Завести дело команды</h1>
+    </header>
+    {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
+    <form method="post" action="/jams/{{.JamID}}/teams/new" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label>Название
+        <input name="name" required minlength="2" maxlength="100" autocomplete="off">
+      </label>
+      <label>Описание
+        <textarea name="description" maxlength="3000" rows="8"></textarea>
+      </label>
+      <label>Аватар команды (JPEG, PNG или WebP)
+        <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp">
+      </label>
+      <button type="submit">Создать команду</button>
+    </form>
+    <p><a href="/">Вернуться на главную</a></p>
+  </main>
+</body>
+</html>
+{{end}}

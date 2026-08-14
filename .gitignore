@@ -1,0 +1,6 @@
+.env
+*.exe
+*.test
+coverage.out
+/storage/avatars/*
+!/storage/avatars/.gitkeep

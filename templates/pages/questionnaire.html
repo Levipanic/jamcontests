@@ -1,0 +1,86 @@
+{{define "questionnaire.html"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+  <title>Анкета участника — {{.JamTitle}}</title>
+  <script src="/static/js/questionnaire.js" defer></script>
+  <style>
+    :root { color-scheme: light; font-family: Georgia, serif; background: #191817; color: #25211d; }
+    body { margin: 0; padding: 2rem 1rem; background: #191817; }
+    main { max-width: 780px; margin: 0 auto; padding: clamp(1.25rem, 4vw, 3rem); background: #eee7d8; box-shadow: 0 1rem 4rem #0008; }
+    h1, legend { font-family: "Courier New", monospace; }
+    .eyebrow, .status { font: 700 .78rem/1.4 "Courier New", monospace; text-transform: uppercase; letter-spacing: .09em; }
+    .notice, .error, .readonly { padding: .8rem 1rem; border-left: .3rem solid #8e241d; background: #fff9; }
+    .error { color: #72170f; }
+    fieldset { margin: 1.5rem 0; padding: 1.25rem; border: 1px solid #a99e8b; }
+    legend { max-width: 100%; padding: 0 .4rem; font-weight: 700; }
+    label.option { display: block; margin: .65rem 0; }
+    input[type="text"], textarea { box-sizing: border-box; width: 100%; padding: .7rem; border: 1px solid #746b5f; background: #faf6ec; color: inherit; font: inherit; }
+    .hint { color: #625a50; }
+    .question-status { min-height: 1.2em; color: #625a50; font-size: .9rem; }
+    .question-status[data-kind="error"] { color: #8e241d; }
+    button { padding: .75rem 1.1rem; border: 0; background: #8e241d; color: white; font: 700 .9rem "Courier New", monospace; cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .6; }
+    aside { margin-top: 2.5rem; padding-top: 1rem; border-top: 2px solid #25211d; }
+    .members { padding-left: 1.2rem; }
+    .members span { font-family: "Courier New", monospace; }
+    a { color: #72170f; }
+  </style>
+</head>
+<body>
+<main id="questionnaire" data-writable="{{if .Writable}}true{{else}}false{{end}}" data-autosave-url="/jams/{{.JamID}}/questionnaire/autosave">
+  <p class="eyebrow">Личное дело / {{.JamTitle}}</p>
+  <h1>Анкета участника</h1>
+  <p>Текущий статус: <strong id="response-status">{{if eq .ResponseStatus "completed"}}завершена{{else}}черновик{{end}}</strong>.</p>
+  {{if .Completed}}<p class="notice" role="status">Анкета завершена. Ответы учтены при проверке команды.</p>{{end}}
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  {{if not .Writable}}<p class="readonly">Стадия «{{.Stage}}»: анкета доступна только для чтения.</p>{{end}}
+
+  <section aria-label="Вопросы анкеты">
+    {{range .Questions}}
+    <fieldset data-question data-question-id="{{.ID}}" data-question-type="{{.Type}}">
+      <legend>{{.Prompt}}{{if .Required}} *{{end}}</legend>
+      {{if .Hint}}<p class="hint">{{.Hint}}</p>{{end}}
+      {{if eq .Type "short_text"}}
+        <label>
+          <span class="eyebrow">Ответ, до {{.TextLimit}} символов</span>
+          <textarea class="questionnaire-text" maxlength="{{.TextLimit}}" rows="4" {{if not $.Writable}}disabled{{end}}>{{.TextValue}}</textarea>
+        </label>
+      {{else}}
+        {{$question := .}}
+        {{range .Options}}
+        <label class="option">
+          <input class="questionnaire-choice" type="{{if eq $question.Type "single_choice"}}radio{{else}}checkbox{{end}}" name="question-{{$question.ID}}" value="{{.ID}}" {{if .Selected}}checked{{end}} {{if not $.Writable}}disabled{{end}}>
+          <span>{{.Label}}</span>
+        </label>
+        {{end}}
+      {{end}}
+      <p class="question-status" data-question-status aria-live="polite"></p>
+    </fieldset>
+    {{else}}
+    <p class="error">В анкете пока нет вопросов.</p>
+    {{end}}
+  </section>
+
+  {{if .Writable}}
+  <form id="questionnaire-complete" method="post" action="/jams/{{.JamID}}/questionnaire/complete">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit">Завершить анкету</button>
+  </form>
+  {{end}}
+
+  <aside>
+    <h2>Статусы участников команды</h2>
+    <p class="hint">Ответы других участников недоступны.</p>
+    <ul class="members">
+      {{range .Members}}<li>{{.Username}} — <span>{{if eq .Status "completed"}}завершена{{else}}черновик{{end}}</span></li>{{end}}
+    </ul>
+  </aside>
+  <p><a href="/">Вернуться на главную</a></p>
+</main>
+</body>
+</html>
+{{end}}

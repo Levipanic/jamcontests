@@ -1,0 +1,27 @@
+{{define "team_invite.html"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+  <meta name="referrer" content="no-referrer">
+  <title>Приглашение в команду</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <main class="dossier">
+    <p>Приглашение в джем</p>
+    <h1>{{.TeamName}}</h1>
+    <p>{{.JamTitle}}</p>
+    {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
+    <p>Вступление подтвердит ваше участие в этой команде. В одном джеме можно состоять только в одной команде.</p>
+    <form method="post" action="/invites/{{.Token}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit">Вступить в команду</button>
+    </form>
+    <p><a href="/teams/{{.TeamID}}">Посмотреть команду</a></p>
+  </main>
+</body>
+</html>
+{{end}}

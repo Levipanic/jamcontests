@@ -1,0 +1,55 @@
+# Jam Contests
+
+Легковесная платформа командных творческих джемов на Go, Gin и PostgreSQL.
+
+## Локальный запуск
+
+Требуются Go 1.24+, Docker с Compose и PowerShell 7+.
+
+1. Запустите PostgreSQL:
+
+   ```powershell
+   docker compose up -d postgres
+   ```
+
+2. Задайте переменные окружения по образцу `.env.example`. Минимум:
+
+   ```powershell
+   $env:DATABASE_URL = 'postgres://jamcontests:jamcontests@localhost:5432/jamcontests?sslmode=disable'
+   $env:CSRF_SECRET = 'replace-with-at-least-32-random-characters'
+   ```
+
+3. Примените миграции:
+
+   ```powershell
+   go run ./cmd/jamcontests migrate
+   ```
+
+4. Создайте первого администратора:
+
+   ```powershell
+   $env:ADMIN_PASSWORD = 'use-a-long-unique-password'
+   go run ./cmd/jamcontests create-admin --username admin
+   Remove-Item Env:ADMIN_PASSWORD
+   ```
+
+5. Запустите сервер:
+
+   ```powershell
+   go run ./cmd/jamcontests serve
+   ```
+
+Сайт будет доступен на `http://localhost:8080`. Ссылки на административную панель в пользовательском интерфейсе нет; защищённый вход находится по адресу `/admin`.
+
+## Проверки
+
+```powershell
+go fmt ./...
+go test ./...
+go build ./...
+go vet ./...
+```
+
+Загруженные аватары сохраняются в `storage/avatars` и не попадают в Git. В production этот каталог и PostgreSQL должны входить в резервное копирование.
+
+В production задайте отдельный `MIGRATION_DATABASE_URL` для роли-владельца схемы. Runtime-роль из `DATABASE_URL` должна иметь только необходимые приложению права; для `admin_audit_log` ей нужны `SELECT` и `INSERT`, но не `UPDATE`, `DELETE`, `TRUNCATE` или владение таблицей. Миграция дополнительно блокирует эти изменения триггерами.

@@ -1,0 +1,169 @@
+{{define "home.html"}}<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+  <meta name="referrer" content="no-referrer">
+  <title>{{if .Jam}}{{.Jam.Title}}{{else}}Архив творческих джемов{{end}}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body data-authenticated="{{if .User}}true{{else}}false{{end}}" data-auth-open="{{if .AuthOpen}}true{{else}}false{{end}}" data-auth-mode="{{.AuthMode}}">
+  <nav class="anchor-nav" aria-label="Навигация по делу">
+    <a href="#jam"><span>01</span> Джем</a>
+    <a href="#teams"><span>02</span> Команды</a>
+    <a href="#profile"><span>03</span> Профиль</a>
+  </nav>
+
+  <header class="site-mark">
+    <a href="/" aria-label="Главная">АРХИВ / JC</a>
+    {{if .User}}
+      <span class="identity-mark">{{.User.Username}}</span>
+    {{else}}
+      <button class="text-button" type="button" data-open-auth="login">Открыть личное дело</button>
+    {{end}}
+  </header>
+
+  <main>
+    <section class="hero section-shell" id="jam" aria-labelledby="jam-title">
+      {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+      {{if .Jam}}
+        <div class="case-heading">
+          <p class="eyebrow">Опубликованное дело / № {{.Jam.ID}}</p>
+          <h1 id="jam-title">{{.Jam.Title}}</h1>
+          {{if .Jam.Description}}<p class="lede">{{.Jam.Description}}</p>{{end}}
+        </div>
+
+        <ol class="stage-ribbon" aria-label="Стадии джема">
+          <li class="{{if gt .Jam.StageIndex 0}}past{{else if eq .Jam.StageIndex 0}}current{{end}}"><span>01</span>Сбор</li>
+          <li class="{{if gt .Jam.StageIndex 1}}past{{else if eq .Jam.StageIndex 1}}current{{end}}"><span>02</span>Сдача</li>
+          <li class="{{if gt .Jam.StageIndex 2}}past{{else if eq .Jam.StageIndex 2}}current{{end}}"><span>03</span>Оценка</li>
+          <li class="{{if gt .Jam.StageIndex 3}}past{{else if eq .Jam.StageIndex 3}}current{{end}}"><span>04</span>Голосование</li>
+          <li class="{{if eq .Jam.StageIndex 4}}current{{end}}"><span>05</span>Финал</li>
+        </ol>
+
+        <div class="timer-card" data-timer data-deadline="{{.Jam.NextStageRFC3339}}" data-stage="{{.Jam.Stage}}">
+          <div>
+            <p class="eyebrow">До следующей отметки</p>
+            <p class="timer" aria-live="polite"><span data-days>00</span><i>д</i> <span data-hours>00</span><i>ч</i> <span data-minutes>00</span><i>м</i> <span data-seconds>00</span><i>с</i></p>
+          </div>
+          <div class="stage-stamp">{{.Jam.Stage}}</div>
+        </div>
+
+        {{if .Jam.Rules}}
+        <details class="rules-paper">
+          <summary>Правила дела</summary>
+          <p>{{.Jam.Rules}}</p>
+        </details>
+        {{end}}
+      {{else}}
+        <div class="empty-case">
+          <p class="eyebrow">Архивная отметка</p>
+          <div class="closed-stamp">Дело закрыто</div>
+          <h1 id="jam-title">Новое дело ещё не открыто</h1>
+          <p>Здесь появятся фазы, дедлайны и материалы следующего творческого джема.</p>
+        </div>
+      {{end}}
+    </section>
+
+    <section class="teams-section section-shell" id="teams" aria-labelledby="teams-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">Картотека участников</p><h2 id="teams-title">Команды</h2></div>
+        {{if .Jam}}
+          {{if .User}}
+            {{if and .Profile (eq .Profile.TeamID 0)}}
+              {{if or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")}}<a class="action" href="/jams/{{.Jam.ID}}/teams/new">Создать команду</a>{{end}}
+            {{else if and .Profile .Profile.TeamID}}<a class="action secondary" href="/teams/{{.Profile.TeamID}}">Моя команда</a>{{end}}
+          {{else}}
+            {{if or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")}}<a class="action" href="/login?next=/jams/{{.Jam.ID}}/teams/new" data-auth-required data-next="/jams/{{.Jam.ID}}/teams/new">Создать команду</a>{{end}}
+          {{end}}
+        {{end}}
+      </div>
+
+      {{if and .Jam .Teams}}
+      <div class="folder-scroll" tabindex="0" aria-label="Горизонтальный список команд">
+        {{range .Teams}}
+        <a class="team-folder {{if .IsOwn}}own{{end}}" href="/teams/{{.ID}}">
+          <span class="folder-tab">Дело № {{.ID}}</span>
+          <span class="folder-body">
+            {{if .AvatarPath}}<img src="/avatars/{{.AvatarPath}}" alt="" width="72" height="72" loading="lazy">{{else}}<span class="avatar-placeholder" aria-hidden="true">JC</span>{{end}}
+            <span class="folder-copy">
+              <strong>{{.Name}}</strong>
+              <small>{{.MemberCount}} / {{.MaxSize}} участников</small>
+              {{if .Description}}<span>{{.Description}}</span>{{end}}
+            </span>
+            {{if .IsOwn}}<em class="eligibility {{if .Eligible}}approved{{end}}">{{if .Eligible}}Допуск получен{{else}}Допуск не получен{{end}}</em>{{end}}
+          </span>
+        </a>
+        {{end}}
+      </div>
+      {{else}}
+        <div class="empty-row"><span>Картотека пуста</span><p>Первая команда откроет новое досье.</p></div>
+      {{end}}
+    </section>
+
+    <section class="profile-section section-shell" id="profile" aria-labelledby="profile-title">
+      <div class="section-heading"><div><p class="eyebrow">Личное дело</p><h2 id="profile-title">Профиль</h2></div></div>
+      {{if .User}}
+      <div class="profile-grid">
+        <article class="profile-card">
+          <span class="portrait-placeholder" aria-hidden="true">{{.User.Username}}</span>
+          <dl>
+            <dt>Позывной</dt><dd>{{.User.Username}}</dd>
+            <dt>Контакт</dt><dd>{{if .User.Email}}{{.User.Email}}{{else}}не указан{{end}}</dd>
+            {{if and .Profile .Profile.TeamID}}<dt>Команда</dt><dd><a href="/teams/{{.Profile.TeamID}}">{{.Profile.TeamName}}</a>, {{.Profile.TeamRole}}</dd>
+            <dt>Анкета</dt><dd>{{if eq .Jam.Stage "upcoming"}}<a href="/jams/{{.Jam.ID}}/questionnaire">{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}</a>{{else}}{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}{{end}}</dd>
+            <dt>Допуск</dt><dd>{{if .Profile.Eligible}}получен{{else}}не получен{{end}}</dd>{{end}}
+          </dl>
+        </article>
+        <div class="profile-actions">
+          {{if .ProfileError}}<p class="alert" role="alert">{{.ProfileError}}</p>{{end}}
+          <form method="post" action="/profile" class="paper-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <label>Username<input name="username" value="{{.User.Username}}" minlength="3" maxlength="40" required autocomplete="username"></label>
+            <label>Email, необязательно<input name="email" type="email" value="{{if .User.Email}}{{.User.Email}}{{end}}" maxlength="254" autocomplete="email"></label>
+            <button type="submit">Обновить личное дело</button>
+          </form>
+          <form method="post" action="/logout">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button class="text-button danger" type="submit">Закрыть сеанс</button>
+          </form>
+        </div>
+      </div>
+      {{else}}
+      <div class="guest-profile">
+        <p>Личное дело не найдено. Войдите или зарегистрируйтесь, чтобы собрать команду и участвовать в джеме.</p>
+        <button class="action" type="button" data-open-auth="login">Открыть досье</button>
+      </div>
+      {{end}}
+    </section>
+  </main>
+
+  {{if not .User}}
+  <dialog class="auth-dossier" id="auth-dossier" aria-labelledby="auth-title">
+    <button class="dialog-close" type="button" data-close-auth aria-label="Закрыть">×</button>
+    <p class="eyebrow">Отдел регистрации / форма 01</p>
+    <h2 id="auth-title">Доступ к архиву</h2>
+    {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+    <div class="auth-tabs" role="tablist">
+      <button type="button" role="tab" data-auth-tab="login">Вход</button>
+      <button type="button" role="tab" data-auth-tab="register">Регистрация</button>
+    </div>
+    <form method="post" action="/login" class="paper-form auth-panel" data-auth-panel="login">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="next" value="{{.Next}}" data-auth-next>
+      <label>Username<input name="username" value="{{.AuthUsername}}" required minlength="3" maxlength="40" autocomplete="username"></label>
+      <label>Пароль<input name="password" type="password" required minlength="10" autocomplete="current-password"></label>
+      <button type="submit">Войти в архив</button>
+    </form>
+    <form method="post" action="/register" class="paper-form auth-panel" data-auth-panel="register">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="next" value="{{.Next}}" data-auth-next>
+      <label>Публичный username<input name="username" value="{{.AuthUsername}}" required minlength="3" maxlength="40" autocomplete="username"></label>
+      <label>Email, необязательно<input name="email" type="email" value="{{.AuthEmail}}" maxlength="254" autocomplete="email"></label>
+      <label>Пароль, минимум 10 символов<input name="password" type="password" required minlength="10" autocomplete="new-password"></label>
+      <button type="submit">Завести личное дело</button>
+    </form>
+  </dialog>
+  {{end}}
+</body>
+</html>{{end}}

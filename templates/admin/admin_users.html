@@ -1,0 +1,11 @@
+{{define "admin_users.html"}}<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Пользователи | Администрирование</title>
+<style>body{max-width:75rem;margin:2rem auto;padding:0 1rem;font:16px/1.45 Georgia,serif;color:#211;background:#f2eee4}header,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.2rem;margin-bottom:1rem}nav a{margin-right:1rem;color:#741d1d}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;padding:.6rem;border-bottom:1px solid #ddd}form{display:flex;gap:.4rem;flex-wrap:wrap}input{min-width:14rem}.error{color:#8d1111;font-weight:bold}</style>
+</head><body>
+<header><h1>Пользователи</h1><nav><a href="/admin">Джемы</a><a href="/admin/users">Пользователи</a><a href="/admin/teams">Команды</a><a href="/admin/audit">Аудит</a></nav></header>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+<section>{{if .Users}}<table><thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Роль</th><th>Изменить роль</th></tr></thead><tbody>
+{{range .Users}}<tr><td>{{.ID}}</td><td>{{.Username}}</td><td>{{if .Email}}{{.Email}}{{else}}не указан{{end}}</td><td>{{.Role}}</td><td><form method="post" action="/admin/users/{{.ID}}/role"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><select name="role"><option value="user"{{if eq .Role "user"}} selected{{end}}>user</option><option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option></select><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button type="submit">Сохранить</button></form></td></tr>{{end}}
+</tbody></table>{{else}}<p>Пользователей нет.</p>{{end}}</section>
+</body></html>{{end}}

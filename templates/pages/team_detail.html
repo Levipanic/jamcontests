@@ -1,0 +1,106 @@
+{{define "team_detail.html"}}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}">
+  <meta name="referrer" content="no-referrer">
+  <title>{{.Team.Name}}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <main class="dossier">
+    <article>
+      <header>
+        <p>Командное дело № {{.Team.ID}}</p>
+        <h1>{{.Team.Name}}</h1>
+      </header>
+      {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
+      {{if .Team.AvatarPath}}<img src="/avatars/{{.Team.AvatarPath}}" alt="Аватар команды {{.Team.Name}}" width="240" height="240">{{end}}
+      {{if .Team.Description}}<p>{{.Team.Description}}</p>{{end}}
+      <dl>
+        <dt>Капитан</dt><dd>{{.Team.CaptainName}}</dd>
+        <dt>Участников</dt><dd>{{.Team.MemberCount}}</dd>
+        {{if .Team.IsMember}}<dt>Допуск команды</dt><dd>{{if .Team.Eligible}}подтверждён{{else}}не подтверждён{{end}}</dd>{{end}}
+      </dl>
+      <h2>Состав</h2>
+      <ul>
+        {{range .Team.Members}}
+        <li>
+          <strong>{{.Username}}</strong>{{if .Captain}}: капитан{{end}}
+          {{if $.Team.IsMember}}
+            <span>Опросник: {{if .QuestionnaireDone}}завершён{{else}}не завершён{{end}}</span>
+            <span>Редактор продукта: {{if .ProductEditor}}да{{else}}нет{{end}}</span>
+          {{end}}
+          {{if and $.Team.CanManage (not .Captain)}}
+          <form method="post" action="/teams/{{$.Team.ID}}/captain">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="user_id" value="{{.ID}}">
+            <button type="submit">Передать капитанство</button>
+          </form>
+          {{end}}
+          {{if $.Team.CanManage}}
+          <form method="post" action="/teams/{{$.Team.ID}}/product-editor">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="user_id" value="{{.ID}}">
+            <button type="submit">{{if .ProductEditor}}Снять полномочия редактора{{else}}Назначить редактором продукта{{end}}</button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+    </article>
+
+    {{if .Team.CanManage}}
+    <section aria-labelledby="team-edit-heading">
+      <h2 id="team-edit-heading">Карточка команды</h2>
+      <form method="post" action="/teams/{{.Team.ID}}/edit" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label>Название
+          <input name="name" value="{{.Team.Name}}" required minlength="2" maxlength="100">
+        </label>
+        <label>Описание
+          <textarea name="description" maxlength="3000" rows="8">{{.Team.Description}}</textarea>
+        </label>
+        <label>Новый аватар (JPEG, PNG или WebP)
+          <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp">
+        </label>
+        <button type="submit">Сохранить карточку</button>
+      </form>
+    </section>
+
+    <section aria-labelledby="invite-heading">
+      <h2 id="invite-heading">Приглашение</h2>
+      {{if .Team.InvitePath}}
+        <p>Новая ссылка показывается один раз:</p>
+        <p><a href="{{.Team.InvitePath}}">{{.Team.InvitePath}}</a></p>
+      {{else if .Team.InviteLive}}
+        <p>Действующая ссылка выпущена. Её исходный токен не хранится; выпустите новую, если ссылка потеряна.</p>
+      {{else}}
+        <p>Действующего приглашения нет.</p>
+      {{end}}
+      <form method="post" action="/teams/{{.Team.ID}}/invite">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit">Выпустить новую ссылку</button>
+      </form>
+      {{if .Team.InviteLive}}
+      <form method="post" action="/teams/{{.Team.ID}}/invite/revoke">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit">Отозвать приглашение</button>
+      </form>
+      {{end}}
+    </section>
+    {{end}}
+
+    {{if .Team.CanLeave}}
+    <form method="post" action="/teams/{{.Team.ID}}/leave">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit">Выйти из команды</button>
+    </form>
+    {{end}}
+    <p><a href="/">Вернуться на главную</a></p>
+  </main>
+</body>
+</html>
+{{end}}

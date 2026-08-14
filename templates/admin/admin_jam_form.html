@@ -1,0 +1,42 @@
+{{define "admin_jam_form.html"}}<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{if .Jam}}Редактирование джема{{else}}Новый джем{{end}}</title>
+  <style>
+    body{max-width:58rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 Georgia,serif;color:#211;background:#f2eee4}main,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}label{display:block;margin:.8rem 0}input,textarea,select{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}textarea{min-height:6rem}button{padding:.55rem .9rem}.actions{display:flex;gap:.75rem;flex-wrap:wrap}.danger{border:2px solid #8d1111}.error{color:#8d1111;font-weight:bold}.meta{font-family:monospace}fieldset{margin-top:1rem}
+  </style>
+</head>
+<body><p><a href="/admin">← К списку джемов</a></p><main>
+<h1>{{if .Jam}}Редактирование: {{.Jam.Title}}{{else}}Новый draft-джем{{end}}</h1>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{if .Jam}}<p class="meta">ID {{.Jam.ID}} · {{.Jam.Visibility}} · effective stage: {{.Jam.Stage}} · вопросов: {{.Jam.QuestionCount}}</p>{{end}}
+<form method="post" action="{{if .Jam}}/admin/jams/{{.Jam.ID}}/edit{{else}}/admin/jams/new{{end}}">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+<label>Название <input name="title" maxlength="160" required value="{{.JamForm.Title}}"></label>
+<label>Описание <textarea name="description" maxlength="10000">{{.JamForm.Description}}</textarea></label>
+<label>Правила <textarea name="rules" maxlength="20000">{{.JamForm.Rules}}</textarea></label>
+<fieldset><legend>Расписание, Europe/Moscow</legend>
+<label>Начало submission <input type="datetime-local" name="submission_starts_at" required value="{{.JamForm.SubmissionStarts}}"></label>
+<label>Начало evaluation <input type="datetime-local" name="evaluation_starts_at" required value="{{.JamForm.EvaluationStarts}}"></label>
+<label>Начало voting <input type="datetime-local" name="voting_starts_at" required value="{{.JamForm.VotingStarts}}"></label>
+<label>Завершение <input type="datetime-local" name="finishes_at" required value="{{.JamForm.Finishes}}"></label>
+</fieldset>
+<label>Максимальный размер команды <input type="number" min="1" max="100" name="max_team_size" required value="{{.JamForm.MaxTeamSize}}"></label>
+<label>Причина изменения <textarea name="reason" minlength="3" maxlength="1000" required>{{.JamForm.Reason}}</textarea></label>
+<button type="submit">{{if .Jam}}Сохранить изменения{{else}}Создать джем{{end}}</button>
+</form>
+</main>
+{{if .Jam}}
+<section><h2>Анкета</h2><p><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Открыть конструктор вопросов</a></p></section>
+<section class="danger"><h2>Видимость и стадия</h2><p>Все действия требуют отдельного обоснования. Hard delete отсутствует.</p>
+{{if eq .Jam.Visibility "draft"}}
+<form method="post" action="/admin/jams/{{.Jam.ID}}/publish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Опубликовать</button></form>
+{{else}}
+<form method="post" action="/admin/jams/{{.Jam.ID}}/unpublish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина снятия с публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Снять с публикации</button></form>
+{{end}}
+<form method="post" action="/admin/jams/{{.Jam.ID}}/override"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="stage" value="upcoming"><label>Причина override upcoming <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Установить upcoming</button></form>
+<form method="post" action="/admin/jams/{{.Jam.ID}}/auto"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина возврата в auto <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Вернуть автоматическую стадию</button></form>
+</section>
+{{end}}
+</body></html>{{end}}
