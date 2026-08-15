@@ -43,25 +43,30 @@ type ProductView struct {
 	Status          string
 	Theme           string
 	NominationTitle string
+	BumpCount       int64
 }
 
 type productPageData struct {
-	User      *User
-	CSRFToken string
-	Error     string
-	JamID     int64
-	JamTitle  string
-	TeamID    int64
-	TeamName  string
-	Product   ProductView
+	User         *User
+	CSRFToken    string
+	Error        string
+	JamID        int64
+	JamTitle     string
+	TeamID       int64
+	TeamName     string
+	Product      ProductView
+	Stage        Stage
+	BumpsMutable bool
 }
 
 type productsListPageData struct {
-	User      *User
-	CSRFToken string
-	JamID     int64
-	JamTitle  string
-	Products  []ProductView
+	User         *User
+	CSRFToken    string
+	JamID        int64
+	JamTitle     string
+	Products     []ProductView
+	Stage        Stage
+	BumpsMutable bool
 }
 
 type adminProductsPageData struct {
@@ -320,12 +325,20 @@ func (a *App) productsList(c *gin.Context) {
 	}
 	rows, err := a.pool.Query(c.Request.Context(), `
 		SELECT p.id, p.title, p.result_url, p.description, COALESCE(p.commentary_url, ''),
-		       team.id, team.name, theme.phrase
+		       team.id, team.name, theme.phrase,
+		       COALESCE((SELECT SUM(bump.bump_count)::bigint FROM product_bumps bump
+		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0)
 		FROM products p
+		JOIN jams jam ON jam.id=p.jam_id AND jam.visibility='published'
 		JOIN teams team ON team.id=p.team_id AND team.jam_id=p.jam_id
 		JOIN team_theme_selections selection ON selection.team_id=p.team_id AND selection.jam_id=p.jam_id
 		JOIN jam_themes theme ON theme.id=selection.theme_id AND theme.jam_id=p.jam_id
 		WHERE p.jam_id=$1 AND p.status='final'
+		  AND CASE
+		      WHEN jam.status_override IS NOT NULL
+		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
+		      ELSE clock_timestamp() >= jam.evaluation_starts_at
+		  END
 		ORDER BY p.finalized_at, p.id`, jamID)
 	if err != nil {
 		a.productFailure(c, "load public products", err)
@@ -336,7 +349,7 @@ func (a *App) productsList(c *gin.Context) {
 	for rows.Next() {
 		var product ProductView
 		product.JamID = jamID
-		if err = rows.Scan(&product.ID, &product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamName, &product.Theme); err != nil {
+		if err = rows.Scan(&product.ID, &product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamName, &product.Theme, &product.BumpCount); err != nil {
 			a.productFailure(c, "scan public product", err)
 			return
 		}
@@ -346,7 +359,7 @@ func (a *App) productsList(c *gin.Context) {
 		a.productFailure(c, "iterate public products", err)
 		return
 	}
-	c.HTML(http.StatusOK, "products_list.html", productsListPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, JamTitle: jamTitle, Products: products})
+	c.HTML(http.StatusOK, "products_list.html", productsListPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, JamTitle: jamTitle, Products: products, Stage: stage, BumpsMutable: canMutateBumps(stage)})
 }
 
 func (a *App) productDetail(c *gin.Context) {
@@ -361,6 +374,8 @@ func (a *App) productDetail(c *gin.Context) {
 	err := a.pool.QueryRow(c.Request.Context(), `
 		SELECT p.id, p.jam_id, jam.title, p.title, p.result_url, p.description,
 		       COALESCE(p.commentary_url, ''), team.id, team.name, theme.phrase,
+		       COALESCE((SELECT SUM(bump.bump_count)::bigint FROM product_bumps bump
+		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0),
 		       jam.submission_starts_at, jam.evaluation_starts_at, jam.voting_starts_at,
 		       jam.finishes_at, jam.status_override
 		FROM products p
@@ -368,9 +383,14 @@ func (a *App) productDetail(c *gin.Context) {
 		JOIN teams team ON team.id=p.team_id AND team.jam_id=p.jam_id
 		JOIN team_theme_selections selection ON selection.team_id=p.team_id AND selection.jam_id=p.jam_id
 		JOIN jam_themes theme ON theme.id=selection.theme_id AND theme.jam_id=p.jam_id
-		WHERE p.id=$1 AND p.status='final'`, productID).Scan(
+		WHERE p.id=$1 AND p.status='final'
+		  AND CASE
+		      WHEN jam.status_override IS NOT NULL
+		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
+		      ELSE clock_timestamp() >= jam.evaluation_starts_at
+		  END`, productID).Scan(
 		&product.ID, &product.JamID, &product.JamTitle, &product.Title, &product.ResultURL,
-		&product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamName, &product.Theme,
+		&product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamName, &product.Theme, &product.BumpCount,
 		&schedule.SubmissionStartsAt, &schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override)
 	if errors.Is(err, pgx.ErrNoRows) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -384,11 +404,12 @@ func (a *App) productDetail(c *gin.Context) {
 		stage := Stage(*override)
 		schedule.Override = &stage
 	}
-	if !canDiscloseProducts(EffectiveStage(schedule, time.Now())) {
+	stage := EffectiveStage(schedule, time.Now())
+	if !canDiscloseProducts(stage) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.HTML(http.StatusOK, "product_detail.html", productPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Product: product})
+	c.HTML(http.StatusOK, "product_detail.html", productPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Product: product, Stage: stage, BumpsMutable: canMutateBumps(stage)})
 }
 
 func (a *App) adminProductsPage(c *gin.Context) {

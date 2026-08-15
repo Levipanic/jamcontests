@@ -108,6 +108,7 @@ func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *gin.Engine
 	app.registerThemeRoutes(router)
 	app.registerProductRoutes(router)
 	app.registerNominationRoutes(router)
+	app.registerBumpRoutes(router)
 
 	return router
 }

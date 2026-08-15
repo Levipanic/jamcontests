@@ -1,6 +1,6 @@
 {{define "product_detail.html"}}
 <!doctype html><html lang="ru"><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
   <title>{{.Product.Title}}</title><link rel="stylesheet" href="/static/css/app.css">
 </head><body><main class="dossier">
   <article><p class="eyebrow">Раскрытый продукт / № {{.Product.ID}}</p><h1>{{.Product.Title}}</h1>
@@ -10,5 +10,6 @@
   <section><h2>Внешние материалы</h2><p><a class="action" href="{{.Product.ResultURL}}" target="_blank" rel="noopener noreferrer nofollow">Открыть результат</a></p>
     {{if .Product.CommentaryURL}}<p><a href="{{.Product.CommentaryURL}}" target="_blank" rel="noopener noreferrer nofollow">Комментарий или разбор</a></p>{{end}}
   </section>
+  <section data-bump-product="{{.Product.ID}}"><h2>Бампы</h2><p><strong data-bump-count>{{.Product.BumpCount}}</strong></p>{{if and .User .BumpsMutable}}<button type="button" data-bump-action>Бамп</button>{{else if .BumpsMutable}}<a href="/login?next=/products/{{.Product.ID}}">Войдите, чтобы бампнуть</a>{{end}}<p role="status" data-bump-status></p></section>
   <p><a href="/jams/{{.Product.JamID}}/products">Все продукты джема</a></p>
-</main></body></html>{{end}}
+</main><script src="/static/js/bumps.js" defer></script></body></html>{{end}}
