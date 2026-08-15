@@ -244,6 +244,15 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .product-index { display: grid; gap: 1.2rem; }
 .product-index > article { padding: 1.2rem; border: 1px solid var(--line); background: #f2e9d8; }
 .product-index h2 { margin-top: 0; }
+.ballot-list { display: grid; gap: 1.5rem; }
+.ballot { padding: clamp(1rem, 3vw, 1.8rem); border: 1px solid var(--line); background: #f2e9d8; }
+.ballot fieldset { display: grid; gap: .65rem; margin: 1rem 0; padding: 0; border: 0; }
+.ballot legend { margin-bottom: .7rem; font-weight: 700; }
+.dossier .ballot-option { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .8rem; padding: .8rem; border: 1px solid #b4a996; background: var(--paper-light); text-transform: none; }
+.dossier .ballot-option input { width: auto; }
+.ballot-option small { display: block; margin-top: .25rem; color: #625a4f; }
+.ballot-option strong { min-width: 2.5rem; text-align: right; }
+.ballot-option:has(input:disabled) { opacity: .62; }
 
 @media (max-width: 760px) {
   .site-mark { position: absolute; }

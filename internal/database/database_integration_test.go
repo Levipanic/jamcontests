@@ -45,11 +45,11 @@ func TestMigrationsApplyToIsolatedPostgreSQLSchema(t *testing.T) {
 		t.Fatalf("case-insensitive username constraint returned %v, want PostgreSQL 23505", err)
 	}
 
-	var bumpsTableExists bool
-	if err := pool.QueryRow(ctx, `SELECT to_regclass('product_bumps') IS NOT NULL`).Scan(&bumpsTableExists); err != nil {
+	var votesTableExists bool
+	if err := pool.QueryRow(ctx, `SELECT to_regclass('nomination_votes') IS NOT NULL`).Scan(&votesTableExists); err != nil {
 		t.Fatal(err)
 	}
-	if !bumpsTableExists {
+	if !votesTableExists {
 		t.Fatal("latest domain migration was not applied")
 	}
 }

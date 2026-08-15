@@ -17,6 +17,17 @@ type NominationView struct {
 	Kind           string
 	Title          string
 	AuthorTeamName string
+	Products       []VotingProductView
+}
+
+type VotingProductView struct {
+	ID         int64
+	Title      string
+	TeamID     int64
+	TeamName   string
+	VoteCount  int64
+	Selected   bool
+	OwnProduct bool
 }
 
 type adminNomination struct {
@@ -77,7 +88,7 @@ func (a *App) nominationsList(c *gin.Context) {
 		return
 	}
 	query := `
-		SELECT nomination.kind, nomination.title
+		SELECT nomination.id, nomination.kind, nomination.title
 		FROM nominations nomination
 		WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
 		  AND (nomination.kind='curator' OR EXISTS (
@@ -88,7 +99,7 @@ func (a *App) nominationsList(c *gin.Context) {
 		ORDER BY nomination.created_at, nomination.id`
 	if stage == StageFinished {
 		query = `
-			SELECT nomination.kind, nomination.title, COALESCE(team.name, '')
+			SELECT nomination.id, nomination.kind, nomination.title, COALESCE(team.name, '')
 			FROM nominations nomination
 			LEFT JOIN teams team ON team.id=nomination.author_team_id AND team.jam_id=nomination.jam_id
 			WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
@@ -109,9 +120,9 @@ func (a *App) nominationsList(c *gin.Context) {
 	for rows.Next() {
 		var nomination NominationView
 		if stage == StageFinished {
-			err = rows.Scan(&nomination.Kind, &nomination.Title, &nomination.AuthorTeamName)
+			err = rows.Scan(&nomination.ID, &nomination.Kind, &nomination.Title, &nomination.AuthorTeamName)
 		} else {
-			err = rows.Scan(&nomination.Kind, &nomination.Title)
+			err = rows.Scan(&nomination.ID, &nomination.Kind, &nomination.Title)
 		}
 		if err != nil {
 			a.nominationFailure(c, "scan public nomination", err)
@@ -123,7 +134,120 @@ func (a *App) nominationsList(c *gin.Context) {
 		a.nominationFailure(c, "iterate public nominations", err)
 		return
 	}
+	if stage == StageVoting {
+		if err = a.populateVotingProducts(c.Request.Context(), jamID, CurrentUser(c), nominations); err != nil {
+			a.nominationFailure(c, "load voting products", err)
+			return
+		}
+	}
+	_, currentStage, err := a.loadPublishedJamStage(c.Request.Context(), jamID)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && !canDiscloseNominations(currentStage) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		a.nominationFailure(c, "recheck public nomination stage", err)
+		return
+	}
+	if currentStage != stage {
+		c.Redirect(http.StatusSeeOther, c.Request.URL.Path)
+		return
+	}
 	c.HTML(http.StatusOK, "nominations_list.html", nominationsPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, JamTitle: jamTitle, Stage: stage, Nominations: nominations})
+}
+
+func (a *App) populateVotingProducts(ctx context.Context, jamID int64, user *User, nominations []NominationView) error {
+	var userID any
+	if user != nil {
+		userID = user.ID
+	}
+	rows, err := a.pool.Query(ctx, `
+		SELECT product.id, product.title, team.id, team.name,
+		       EXISTS (
+		           SELECT 1 FROM team_members member
+		           WHERE member.jam_id=product.jam_id AND member.team_id=product.team_id
+		             AND member.user_id=$2::bigint
+		       )
+		FROM products product
+		JOIN teams team ON team.id=product.team_id AND team.jam_id=product.jam_id
+		JOIN jams jam ON jam.id=product.jam_id AND jam.visibility='published'
+		WHERE product.jam_id=$1 AND product.status='final'
+		  AND CASE
+		      WHEN jam.status_override IS NOT NULL THEN jam.status_override='voting'
+		      ELSE clock_timestamp() >= jam.voting_starts_at AND clock_timestamp() < jam.finishes_at
+		  END
+		ORDER BY product.finalized_at, product.id`, jamID, userID)
+	if err != nil {
+		return err
+	}
+	var products []VotingProductView
+	for rows.Next() {
+		var product VotingProductView
+		if err = rows.Scan(&product.ID, &product.Title, &product.TeamID, &product.TeamName, &product.OwnProduct); err != nil {
+			rows.Close()
+			return err
+		}
+		products = append(products, product)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	type voteKey struct {
+		nominationID int64
+		productID    int64
+	}
+	counts := make(map[voteKey]int64)
+	selected := make(map[voteKey]bool)
+	rows, err = a.pool.Query(ctx, `
+		SELECT vote.nomination_id, vote.product_id, count(*)::bigint,
+		       COALESCE(bool_or(vote.user_id=$2::bigint), false)
+		FROM nomination_votes vote
+		JOIN nominations nomination ON nomination.id=vote.nomination_id AND nomination.jam_id=vote.jam_id
+		JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
+		JOIN jams jam ON jam.id=vote.jam_id AND jam.visibility='published'
+		WHERE vote.jam_id=$1 AND nomination.withdrawn_at IS NULL AND product.status='final'
+		  AND (nomination.kind='curator' OR EXISTS (
+		      SELECT 1 FROM products author_product
+		      WHERE author_product.id=nomination.product_id AND author_product.jam_id=nomination.jam_id
+		        AND author_product.status='final'
+		  ))
+		  AND CASE
+		      WHEN jam.status_override IS NOT NULL THEN jam.status_override='voting'
+		      ELSE clock_timestamp() >= jam.voting_starts_at AND clock_timestamp() < jam.finishes_at
+		  END
+		GROUP BY vote.nomination_id, vote.product_id`, jamID, userID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var key voteKey
+		var count int64
+		var isSelected bool
+		if err = rows.Scan(&key.nominationID, &key.productID, &count, &isSelected); err != nil {
+			rows.Close()
+			return err
+		}
+		counts[key] = count
+		selected[key] = isSelected
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for index := range nominations {
+		nominations[index].Products = make([]VotingProductView, len(products))
+		copy(nominations[index].Products, products)
+		for productIndex := range nominations[index].Products {
+			key := voteKey{nominationID: nominations[index].ID, productID: nominations[index].Products[productIndex].ID}
+			nominations[index].Products[productIndex].VoteCount = counts[key]
+			nominations[index].Products[productIndex].Selected = selected[key]
+		}
+	}
+	return nil
 }
 
 func (a *App) adminNominationsPage(c *gin.Context) {
