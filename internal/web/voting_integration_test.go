@@ -34,7 +34,7 @@ func TestVotingHTTPMutationCountsSelfVoteAndConcurrency(t *testing.T) {
 	router := New(cfg, pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	sessionCookie := insertVotingTestSession(t, ctx, pool, cfg.SessionCookie, fixture.voterID)
 
-	countsRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil)
+	countsRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamPublic), nil)
 	countsRecorder := httptest.NewRecorder()
 	router.ServeHTTP(countsRecorder, countsRequest)
 	if countsRecorder.Code != http.StatusOK {
@@ -42,17 +42,17 @@ func TestVotingHTTPMutationCountsSelfVoteAndConcurrency(t *testing.T) {
 	}
 	csrfCookie := responseCookie(t, countsRecorder.Result(), csrfCookieName)
 
-	guestRecorder := performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productBID, csrfCookie, nil)
+	guestRecorder := performVoteRequest(router, fixture.jamPublic, fixture.nominationPublic, fixture.productBPublic, csrfCookie, nil)
 	if guestRecorder.Code != http.StatusUnauthorized {
 		t.Fatalf("guest vote status = %d, want 401", guestRecorder.Code)
 	}
-	authCSRFRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil)
+	authCSRFRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamPublic), nil)
 	authCSRFRequest.AddCookie(sessionCookie)
 	authCSRFRecorder := httptest.NewRecorder()
 	router.ServeHTTP(authCSRFRecorder, authCSRFRequest)
 	csrfCookie = responseCookie(t, authCSRFRecorder.Result(), csrfCookieName)
 
-	response := performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productBID, csrfCookie, sessionCookie)
+	response := performVoteRequest(router, fixture.jamPublic, fixture.nominationPublic, fixture.productBPublic, csrfCookie, sessionCookie)
 	if response.Code != http.StatusOK {
 		t.Fatalf("vote status = %d, body=%s", response.Code, response.Body.String())
 	}
@@ -60,20 +60,20 @@ func TestVotingHTTPMutationCountsSelfVoteAndConcurrency(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &vote); err != nil {
 		t.Fatal(err)
 	}
-	if vote.NominationID != fixture.nominationID || vote.SelectedProductID != fixture.productBID {
+	if vote.NominationID != fixture.nominationPublic || vote.SelectedProductID != fixture.productBPublic {
 		t.Fatalf("unexpected vote response: %+v", vote)
 	}
 
-	response = performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productCID, csrfCookie, sessionCookie)
+	response = performVoteRequest(router, fixture.jamPublic, fixture.nominationPublic, fixture.productCPublic, csrfCookie, sessionCookie)
 	if response.Code != http.StatusOK {
 		t.Fatalf("change vote status = %d, body=%s", response.Code, response.Body.String())
 	}
-	response = performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productAID, csrfCookie, sessionCookie)
+	response = performVoteRequest(router, fixture.jamPublic, fixture.nominationPublic, fixture.productAPublic, csrfCookie, sessionCookie)
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("self vote status = %d, body=%s", response.Code, response.Body.String())
 	}
 
-	countsRequest = httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil)
+	countsRequest = httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamPublic), nil)
 	countsRecorder = httptest.NewRecorder()
 	router.ServeHTTP(countsRecorder, countsRequest)
 	if countsRecorder.Code != http.StatusOK {
@@ -83,9 +83,9 @@ func TestVotingHTTPMutationCountsSelfVoteAndConcurrency(t *testing.T) {
 	if err := json.Unmarshal(countsRecorder.Body.Bytes(), &counts); err != nil {
 		t.Fatal(err)
 	}
-	assertVoteCount(t, counts.Counts, fixture.nominationID, fixture.productAID, 0)
-	assertVoteCount(t, counts.Counts, fixture.nominationID, fixture.productBID, 0)
-	assertVoteCount(t, counts.Counts, fixture.nominationID, fixture.productCID, 1)
+	assertVoteCount(t, counts.Counts, fixture.nominationPublic, fixture.productAPublic, 0)
+	assertVoteCount(t, counts.Counts, fixture.nominationPublic, fixture.productBPublic, 0)
+	assertVoteCount(t, counts.Counts, fixture.nominationPublic, fixture.productCPublic, 1)
 
 	if _, err := pool.Exec(ctx, `DELETE FROM nomination_votes WHERE user_id=$1 AND nomination_id=$2`, fixture.voterID, fixture.nominationID); err != nil {
 		t.Fatal(err)
@@ -93,13 +93,13 @@ func TestVotingHTTPMutationCountsSelfVoteAndConcurrency(t *testing.T) {
 	start := make(chan struct{})
 	responses := make(chan *httptest.ResponseRecorder, 2)
 	var wait sync.WaitGroup
-	for _, productID := range []int64{fixture.productBID, fixture.productCID} {
+	for _, productPublic := range []string{fixture.productBPublic, fixture.productCPublic} {
 		wait.Add(1)
-		go func(productID int64) {
+		go func(productPublic string) {
 			defer wait.Done()
 			<-start
-			responses <- performVoteRequest(router, fixture.jamID, fixture.nominationID, productID, csrfCookie, sessionCookie)
-		}(productID)
+			responses <- performVoteRequest(router, fixture.jamPublic, fixture.nominationPublic, productPublic, csrfCookie, sessionCookie)
+		}(productPublic)
 	}
 	close(start)
 	wait.Wait()
@@ -120,25 +120,30 @@ func TestVotingHTTPMutationCountsSelfVoteAndConcurrency(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE jams SET status_override='finished' WHERE id=$1`, fixture.jamID); err != nil {
 		t.Fatal(err)
 	}
-	countsRequest = httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil)
+	countsRequest = httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamPublic), nil)
 	countsRecorder = httptest.NewRecorder()
 	router.ServeHTTP(countsRecorder, countsRequest)
 	if countsRecorder.Code != http.StatusNotFound {
 		t.Fatalf("finished counts status = %d, want 404", countsRecorder.Code)
 	}
-	response = performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productBID, csrfCookie, sessionCookie)
+	response = performVoteRequest(router, fixture.jamPublic, fixture.nominationPublic, fixture.productBPublic, csrfCookie, sessionCookie)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("finished vote status = %d, want 409", response.Code)
 	}
 }
 
 type votingHTTPFixture struct {
-	jamID        int64
-	voterID      int64
-	nominationID int64
-	productAID   int64
-	productBID   int64
-	productCID   int64
+	jamID            int64
+	jamPublic        string
+	voterID          int64
+	nominationID     int64
+	nominationPublic string
+	productAID       int64
+	productAPublic   string
+	productBID       int64
+	productBPublic   string
+	productCID       int64
+	productCPublic   string
 }
 
 func createVotingHTTPFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) votingHTTPFixture {
@@ -150,13 +155,13 @@ func createVotingHTTPFixture(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	if err := pool.QueryRow(ctx, `
 		INSERT INTO jams (title, visibility, submission_starts_at, evaluation_starts_at, voting_starts_at, finishes_at, status_override, max_team_size)
 		VALUES ('Voting HTTP', 'published', now()-interval '3 hours', now()-interval '2 hours', now()-interval '1 hour', now()+interval '1 hour', 'voting', 5)
-		RETURNING id`).Scan(&fixture.jamID); err != nil {
+		RETURNING id, public_id`).Scan(&fixture.jamID, &fixture.jamPublic); err != nil {
 		t.Fatal(err)
 	}
-	fixture.productAID = insertVotingTestTeamProduct(t, ctx, pool, fixture.jamID, fixture.voterID, "Team A", "Product A")
-	fixture.productBID = insertVotingTestTeamProduct(t, ctx, pool, fixture.jamID, captainBID, "Team B", "Product B")
-	fixture.productCID = insertVotingTestTeamProduct(t, ctx, pool, fixture.jamID, captainCID, "Team C", "Product C")
-	if err := pool.QueryRow(ctx, `INSERT INTO nominations (jam_id, kind, title) VALUES ($1, 'curator', 'Choice') RETURNING id`, fixture.jamID).Scan(&fixture.nominationID); err != nil {
+	fixture.productAID, fixture.productAPublic = insertVotingTestTeamProduct(t, ctx, pool, fixture.jamID, fixture.voterID, "Team A", "Product A")
+	fixture.productBID, fixture.productBPublic = insertVotingTestTeamProduct(t, ctx, pool, fixture.jamID, captainBID, "Team B", "Product B")
+	fixture.productCID, fixture.productCPublic = insertVotingTestTeamProduct(t, ctx, pool, fixture.jamID, captainCID, "Team C", "Product C")
+	if err := pool.QueryRow(ctx, `INSERT INTO nominations (jam_id, kind, title) VALUES ($1, 'curator', 'Choice') RETURNING id, public_id`, fixture.jamID).Scan(&fixture.nominationID, &fixture.nominationPublic); err != nil {
 		t.Fatal(err)
 	}
 	return fixture
@@ -171,7 +176,7 @@ func insertVotingTestUser(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	return id
 }
 
-func insertVotingTestTeamProduct(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jamID, captainID int64, teamName, productTitle string) int64 {
+func insertVotingTestTeamProduct(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jamID, captainID int64, teamName, productTitle string) (int64, string) {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -186,15 +191,16 @@ func insertVotingTestTeamProduct(t *testing.T, ctx context.Context, pool *pgxpoo
 		t.Fatal(err)
 	}
 	var productID int64
+	var productPublic string
 	if err = tx.QueryRow(ctx, `
 		INSERT INTO products (jam_id, team_id, title, result_url, status, finalized_at)
-		VALUES ($1, $2, $3, 'https://example.test/result', 'final', now()) RETURNING id`, jamID, teamID, productTitle).Scan(&productID); err != nil {
+		VALUES ($1, $2, $3, 'https://example.test/result', 'final', now()) RETURNING id, public_id`, jamID, teamID, productTitle).Scan(&productID, &productPublic); err != nil {
 		t.Fatal(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	return productID
+	return productID, productPublic
 }
 
 func insertVotingTestSession(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cookieName string, userID int64) *http.Cookie {
@@ -207,9 +213,9 @@ func insertVotingTestSession(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	return &http.Cookie{Name: cookieName, Value: base64.RawURLEncoding.EncodeToString(raw), Path: "/"}
 }
 
-func performVoteRequest(router http.Handler, jamID, nominationID, productID int64, csrfCookie, sessionCookie *http.Cookie) *httptest.ResponseRecorder {
-	body, _ := json.Marshal(voteRequest{ProductID: productID})
-	request := httptest.NewRequest(http.MethodPost, votingVotePath(jamID, nominationID), bytes.NewReader(body))
+func performVoteRequest(router http.Handler, jamPublic, nominationPublic, productPublic string, csrfCookie, sessionCookie *http.Cookie) *httptest.ResponseRecorder {
+	body, _ := json.Marshal(voteRequest{ProductID: productPublic})
+	request := httptest.NewRequest(http.MethodPost, votingVotePath(jamPublic, nominationPublic), bytes.NewReader(body))
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-CSRF-Token", csrfCookie.Value)
@@ -233,27 +239,27 @@ func responseCookie(t *testing.T, response *http.Response, name string) *http.Co
 	return nil
 }
 
-func votingCountsPath(jamID int64) string {
-	return "/api/jams/" + formatID(jamID) + "/vote-counts"
+func votingCountsPath(jamPublic string) string {
+	return "/api/jams/" + jamPublic + "/vote-counts"
 }
 
-func votingVotePath(jamID, nominationID int64) string {
-	return "/api/jams/" + formatID(jamID) + "/nominations/" + formatID(nominationID) + "/vote"
+func votingVotePath(jamPublic, nominationPublic string) string {
+	return "/api/jams/" + jamPublic + "/nominations/" + nominationPublic + "/vote"
 }
 
 func formatID(id int64) string {
 	return strconv.FormatInt(id, 10)
 }
 
-func assertVoteCount(t *testing.T, counts []voteCount, nominationID, productID, want int64) {
+func assertVoteCount(t *testing.T, counts []voteCount, nominationPublic, productPublic string, want int64) {
 	t.Helper()
 	for _, count := range counts {
-		if count.NominationID == nominationID && count.ProductID == productID {
+		if count.NominationID == nominationPublic && count.ProductID == productPublic {
 			if count.Count != want {
-				t.Fatalf("count for nomination=%d product=%d is %d, want %d", nominationID, productID, count.Count, want)
+				t.Fatalf("count for nomination=%s product=%s is %d, want %d", nominationPublic, productPublic, count.Count, want)
 			}
 			return
 		}
 	}
-	t.Fatalf("count for nomination=%d product=%d is missing", nominationID, productID)
+	t.Fatalf("count for nomination=%s product=%s is missing", nominationPublic, productPublic)
 }

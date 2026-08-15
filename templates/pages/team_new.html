@@ -12,11 +12,11 @@
 <body>
   <main class="dossier">
     <header>
-      <p>Джем № {{.JamID}}</p>
+      <p>Дело джема № {{.PublicJamID}}</p>
       <h1>Завести дело команды</h1>
     </header>
     {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
-    <form method="post" action="/jams/{{.JamID}}/teams/new" enctype="multipart/form-data">
+    <form method="post" action="/jams/{{.PublicJamID}}/teams/new" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <label>Название
         <input name="name" required minlength="2" maxlength="100" autocomplete="off">
@@ -29,7 +29,7 @@
       </label>
       <button type="submit">Создать команду</button>
     </form>
-    <p><a href="/jams/{{.JamID}}">Вернуться к джему</a></p>
+    <p><a href="/jams/{{.PublicJamID}}">Вернуться к джему</a></p>
   </main>
 </body>
 </html>

@@ -33,42 +33,47 @@ type teamMemberView struct {
 }
 
 type teamDetailView struct {
-	ID             int64
-	JamID          int64
-	Name           string
-	Description    string
-	AvatarPath     string
-	CaptainID      int64
-	CaptainName    string
-	MemberCount    int
-	Members        []teamMemberView
-	Eligible       bool
-	InviteLive     bool
-	IsMember       bool
-	IsCaptain      bool
-	CanManage      bool
-	CanLeave       bool
-	ThemePhrase    string
-	CanEditProduct bool
-	ProductID      int64
+	ID              int64
+	PublicID        string
+	JamID           int64
+	PublicJamID     string
+	Name            string
+	Description     string
+	AvatarPath      string
+	CaptainID       int64
+	CaptainName     string
+	MemberCount     int
+	Members         []teamMemberView
+	Eligible        bool
+	InviteLive      bool
+	IsMember        bool
+	IsCaptain       bool
+	CanManage       bool
+	CanLeave        bool
+	ThemePhrase     string
+	CanEditProduct  bool
+	ProductID       int64
+	PublicProductID string
 }
 
 type teamPageView struct {
-	User      *User
-	CSRFToken string
-	Error     string
-	Team      teamDetailView
-	JamID     int64
+	User        *User
+	CSRFToken   string
+	Error       string
+	Team        teamDetailView
+	JamID       int64
+	PublicJamID string
 }
 
 type teamInviteView struct {
-	User      *User
-	CSRFToken string
-	Error     string
-	Token     string
-	TeamID    int64
-	TeamName  string
-	JamTitle  string
+	User         *User
+	CSRFToken    string
+	Error        string
+	Token        string
+	TeamID       int64
+	TeamPublicID string
+	TeamName     string
+	JamTitle     string
 }
 
 type teamLockedRecord struct {
@@ -99,9 +104,14 @@ func (a *App) registerTeamRoutes(router *gin.Engine) {
 }
 
 func (a *App) teamNewPage(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	publicJamID, err := a.publicIDOf(c.Request.Context(), "jams", jamID)
+	if err != nil {
+		a.logger.Error("load jam public id for team creation", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 	allowed, err := a.teamPublishedManageableJam(c.Request.Context(), jamID)
@@ -114,26 +124,31 @@ func (a *App) teamNewPage(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	a.teamRender(c, http.StatusOK, "team_new.html", teamPageView{JamID: jamID, Error: c.Query("error")})
+	a.teamRender(c, http.StatusOK, "team_new.html", teamPageView{JamID: jamID, PublicJamID: publicJamID, Error: c.Query("error")})
 }
 
 func (a *App) teamCreate(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	publicJamID, err := a.publicIDOf(c.Request.Context(), "jams", jamID)
+	if err != nil {
+		a.logger.Error("load jam public id for team creation", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 	defer teamRemoveMultipartFiles(c)
 	name := strings.TrimSpace(c.PostForm("name"))
 	description := strings.TrimSpace(c.PostForm("description"))
 	if err := teamValidateProfile(name, description); err != nil {
-		teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), err.Error())
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), err.Error())
 		return
 	}
 
 	avatarPath, avatarWritten, err := a.teamStoreAvatar(c)
 	if err != nil {
-		teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), err.Error())
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), err.Error())
 		return
 	}
 	if avatarWritten {
@@ -148,7 +163,7 @@ func (a *App) teamCreate(c *gin.Context) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin team creation", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), "Не удалось создать команду. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Не удалось создать команду. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -156,33 +171,39 @@ func (a *App) teamCreate(c *gin.Context) {
 	manageable, err := teamManageableJamTx(ctx, tx, jamID)
 	if err != nil {
 		a.logger.Error("validate jam for team creation", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), "Не удалось создать команду. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Не удалось создать команду. Попробуйте позже.")
 		return
 	}
 	if !manageable {
-		teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), "Создание команд на этом джеме закрыто.")
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Создание команд на этом джеме закрыто.")
 		return
 	}
 
 	user := CurrentUser(c)
+	teamPublicID, err := newPublicID()
+	if err != nil {
+		a.logger.Error("generate team public id", "error", err)
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Не удалось создать команду. Попробуйте позже.")
+		return
+	}
 	var teamID int64
 	err = tx.QueryRow(ctx, `
-		INSERT INTO teams (jam_id, name, description, avatar_path, captain_user_id)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id`, jamID, name, description, teamNullableAvatar(avatarPath), user.ID).Scan(&teamID)
+		INSERT INTO teams (jam_id, name, description, avatar_path, captain_user_id, public_id)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, jamID, name, description, teamNullableAvatar(avatarPath), user.ID, teamPublicID).Scan(&teamID)
 	if err == nil {
 		_, err = tx.Exec(ctx, `INSERT INTO team_members (team_id, jam_id, user_id) VALUES ($1, $2, $3)`, teamID, jamID, user.ID)
 	}
 	if err != nil {
 		if teamConstraint(err, "teams_name_per_jam_ci_unique") {
-			teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), "Команда с таким названием уже существует в этом джеме.")
+			teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Команда с таким названием уже существует в этом джеме.")
 			return
 		}
 		if teamConstraint(err, "team_members_jam_id_user_id_key") {
-			teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), "Вы уже состоите в команде этого джема.")
+			teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Вы уже состоите в команде этого джема.")
 			return
 		}
 		a.logger.Error("create team", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), "Не удалось создать команду. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Не удалось создать команду. Попробуйте позже.")
 		return
 	}
 	// A failed COMMIT can have an unknown outcome. Keep the random file as an
@@ -190,16 +211,15 @@ func (a *App) teamCreate(c *gin.Context) {
 	avatarWritten = false
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit team creation", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/jams/%d/teams/new", jamID), "Не удалось создать команду. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Не удалось создать команду. Попробуйте позже.")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d", teamID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%s", teamPublicID))
 }
 
 func (a *App) teamDetail(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	ctx := c.Request.Context()
@@ -208,7 +228,8 @@ func (a *App) teamDetail(c *gin.Context) {
 	var schedule Schedule
 	var override *string
 	err := a.pool.QueryRow(ctx, `
-		SELECT t.id, t.jam_id, t.name, t.description, t.avatar_path, t.captain_user_id,
+		SELECT t.id, t.public_id, t.jam_id, j.public_id, t.name, t.description,
+		       t.avatar_path, t.captain_user_id,
 		       captain.username, count(tm.user_id), j.submission_starts_at,
 		       j.evaluation_starts_at, j.voting_starts_at, j.finishes_at, j.status_override
 		FROM teams t
@@ -216,9 +237,10 @@ func (a *App) teamDetail(c *gin.Context) {
 		JOIN users captain ON captain.id = t.captain_user_id
 		JOIN team_members tm ON tm.team_id = t.id
 		WHERE t.id = $1
-		GROUP BY t.id, captain.username, j.submission_starts_at, j.evaluation_starts_at,
-		         j.voting_starts_at, j.finishes_at, j.status_override`, teamID).Scan(
-		&view.ID, &view.JamID, &view.Name, &view.Description, &avatarPath, &view.CaptainID,
+		GROUP BY t.id, t.public_id, j.public_id, captain.username, j.submission_starts_at,
+		         j.evaluation_starts_at, j.voting_starts_at, j.finishes_at, j.status_override`, teamID).Scan(
+		&view.ID, &view.PublicID, &view.JamID, &view.PublicJamID, &view.Name,
+		&view.Description, &avatarPath, &view.CaptainID,
 		&view.CaptainName, &view.MemberCount, &schedule.SubmissionStartsAt,
 		&schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override)
 	if err == pgx.ErrNoRows {
@@ -255,7 +277,7 @@ func (a *App) teamDetail(c *gin.Context) {
 	view.CanLeave = view.IsMember && !view.IsCaptain && CanManageTeam(stage)
 	view.CanEditProduct = stage == StageSubmission && view.IsMember && (view.IsCaptain || viewerProductEditor)
 	if canDiscloseProducts(stage) {
-		err = a.pool.QueryRow(ctx, `SELECT id FROM products WHERE team_id=$1 AND jam_id=$2 AND status='final'`, teamID, view.JamID).Scan(&view.ProductID)
+		err = a.pool.QueryRow(ctx, `SELECT id, public_id FROM products WHERE team_id=$1 AND jam_id=$2 AND status='final'`, teamID, view.JamID).Scan(&view.ProductID, &view.PublicProductID)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			a.logger.Error("load disclosed team product", "error", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -352,21 +374,21 @@ func (a *App) teamDetail(c *gin.Context) {
 }
 
 func (a *App) teamEdit(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	publicID := c.Param("id")
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	defer teamRemoveMultipartFiles(c)
 	name := strings.TrimSpace(c.PostForm("name"))
 	description := strings.TrimSpace(c.PostForm("description"))
 	if err := teamValidateProfile(name, description); err != nil {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), err.Error())
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), err.Error())
 		return
 	}
 	avatarPath, avatarWritten, err := a.teamStoreAvatar(c)
 	if err != nil {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), err.Error())
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), err.Error())
 		return
 	}
 	if avatarWritten {
@@ -381,17 +403,17 @@ func (a *App) teamEdit(c *gin.Context) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin team edit", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось изменить команду. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось изменить команду. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
 	team, err := teamLock(ctx, tx, teamID)
 	if err != nil {
-		a.teamMutationLoadError(c, teamID, "изменить команду", err)
+		a.teamMutationLoadError(c, publicID, "изменить команду", err)
 		return
 	}
 	if !teamManageable(team) || team.CaptainID != CurrentUser(c).ID {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Изменение команды сейчас недоступно.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Изменение команды сейчас недоступно.")
 		return
 	}
 	newAvatar := team.AvatarPath
@@ -401,11 +423,11 @@ func (a *App) teamEdit(c *gin.Context) {
 	_, err = tx.Exec(ctx, `UPDATE teams SET name = $1, description = $2, avatar_path = $3, updated_at = now() WHERE id = $4`, name, description, newAvatar, teamID)
 	if err != nil {
 		if teamConstraint(err, "teams_name_per_jam_ci_unique") {
-			teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Команда с таким названием уже существует в этом джеме.")
+			teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Команда с таким названием уже существует в этом джеме.")
 			return
 		}
 		a.logger.Error("update team", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось изменить команду. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось изменить команду. Попробуйте позже.")
 		return
 	}
 	// See teamCreate: preserving an unreferenced random file is safer when the
@@ -413,25 +435,25 @@ func (a *App) teamEdit(c *gin.Context) {
 	avatarWritten = false
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit team edit", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось изменить команду. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось изменить команду. Попробуйте позже.")
 		return
 	}
 	if avatarPath != "" && team.AvatarPath != nil && *team.AvatarPath != avatarPath {
 		a.teamRemoveAvatar(*team.AvatarPath)
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d", teamID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%s", publicID))
 }
 
 func (a *App) teamInviteIssue(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	publicID := c.Param("id")
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		a.logger.Error("generate team invitation")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось выпустить приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось выпустить приглашение. Попробуйте позже.")
 		return
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
@@ -440,13 +462,13 @@ func (a *App) teamInviteIssue(c *gin.Context) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin invitation issue")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось выпустить приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось выпустить приглашение. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
 	team, err := teamLock(ctx, tx, teamID)
 	if err != nil || !teamManageable(team) || team.CaptainID != CurrentUser(c).ID {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Выпуск приглашения сейчас недоступен.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Выпуск приглашения сейчас недоступен.")
 		return
 	}
 	_, err = tx.Exec(ctx, `
@@ -457,27 +479,27 @@ func (a *App) teamInviteIssue(c *gin.Context) {
 		    created_at = now(), revoked_at = NULL`, teamID, hash[:], CurrentUser(c).ID)
 	if err != nil {
 		a.logger.Error("store team invitation")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось выпустить приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось выпустить приглашение. Попробуйте позже.")
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit invitation issue")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось выпустить приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось выпустить приглашение. Попробуйте позже.")
 		return
 	}
-	c.HTML(http.StatusOK, "team_invite_issued.html", teamInviteView{User: CurrentUser(c), CSRFToken: csrfToken(c), Token: token, TeamID: teamID})
+	c.HTML(http.StatusOK, "team_invite_issued.html", teamInviteView{User: CurrentUser(c), CSRFToken: csrfToken(c), Token: token, TeamID: teamID, TeamPublicID: publicID})
 }
 
 func (a *App) teamInviteRevoke(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	publicID := c.Param("id")
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	replacement := make([]byte, 32)
 	if _, err := rand.Read(replacement); err != nil {
 		a.logger.Error("generate invitation revocation value")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось отозвать приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось отозвать приглашение. Попробуйте позже.")
 		return
 	}
 	replacementHash := sha256.Sum256(replacement)
@@ -485,26 +507,26 @@ func (a *App) teamInviteRevoke(c *gin.Context) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin invitation revoke")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось отозвать приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось отозвать приглашение. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
 	team, err := teamLock(ctx, tx, teamID)
 	if err != nil || !teamManageable(team) || team.CaptainID != CurrentUser(c).ID {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Отзыв приглашения сейчас недоступен.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Отзыв приглашения сейчас недоступен.")
 		return
 	}
 	if _, err := tx.Exec(ctx, `UPDATE team_invites SET token_hash = $2, revoked_at = now() WHERE team_id = $1 AND revoked_at IS NULL`, teamID, replacementHash[:]); err != nil {
 		a.logger.Error("revoke team invitation")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось отозвать приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось отозвать приглашение. Попробуйте позже.")
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit invitation revoke")
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось отозвать приглашение. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось отозвать приглашение. Попробуйте позже.")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d", teamID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%s", publicID))
 }
 
 func (a *App) teamInvitePage(c *gin.Context) {
@@ -519,13 +541,13 @@ func (a *App) teamInvitePage(c *gin.Context) {
 	var schedule Schedule
 	var override *string
 	err := a.pool.QueryRow(c.Request.Context(), `
-		SELECT t.id, t.name, j.title, j.submission_starts_at, j.evaluation_starts_at,
+		SELECT t.id, t.public_id, t.name, j.title, j.submission_starts_at, j.evaluation_starts_at,
 		       j.voting_starts_at, j.finishes_at, j.status_override
 		FROM team_invites i
 		JOIN teams t ON t.id = i.team_id
 		JOIN jams j ON j.id = t.jam_id AND j.visibility = 'published'
 		WHERE i.token_hash = $1 AND i.revoked_at IS NULL`, hash).Scan(
-		&view.TeamID, &view.TeamName, &view.JamTitle, &schedule.SubmissionStartsAt,
+		&view.TeamID, &view.TeamPublicID, &view.TeamName, &view.JamTitle, &schedule.SubmissionStartsAt,
 		&schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override)
 	if err == pgx.ErrNoRows {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -605,7 +627,13 @@ func (a *App) teamInviteJoin(c *gin.Context) {
 	if err == nil {
 		message := "Вы уже состоите в команде этого джема."
 		if existingTeamID == team.ID {
-			c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d", team.ID))
+			teamPublicID, publicErr := a.publicIDOf(ctx, "teams", team.ID)
+			if publicErr != nil {
+				a.logger.Error("load joined team public id", "error", publicErr)
+				teamRedirectError(c, "/invites/"+url.PathEscape(token), "Не удалось вступить в команду. Попробуйте позже.")
+				return
+			}
+			c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%s", teamPublicID))
 			return
 		}
 		teamRedirectError(c, "/invites/"+url.PathEscape(token), message)
@@ -641,56 +669,63 @@ func (a *App) teamInviteJoin(c *gin.Context) {
 		teamRedirectError(c, "/invites/"+url.PathEscape(token), "Не удалось вступить в команду. Попробуйте позже.")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d", team.ID))
+	teamPublicID, err := a.publicIDOf(ctx, "teams", team.ID)
+	if err != nil {
+		a.logger.Error("load joined team public id", "error", err)
+		teamRedirectError(c, "/invites/"+url.PathEscape(token), "Не удалось вступить в команду. Попробуйте позже.")
+		return
+	}
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%s", teamPublicID))
 }
 
 func (a *App) teamLeave(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	publicID := c.Param("id")
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin team leave", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось выйти из команды. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось выйти из команды. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
 	team, err := teamLock(ctx, tx, teamID)
 	if err != nil {
-		a.teamMutationLoadError(c, teamID, "выйти из команды", err)
+		a.teamMutationLoadError(c, publicID, "выйти из команды", err)
 		return
 	}
 	userID := CurrentUser(c).ID
 	if !teamManageable(team) {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Изменение состава команды уже закрыто.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Изменение состава команды уже закрыто.")
 		return
 	}
 	if team.CaptainID == userID {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Сначала передайте капитанство другому участнику.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Сначала передайте капитанство другому участнику.")
 		return
 	}
 	result, err := tx.Exec(ctx, `DELETE FROM team_members WHERE team_id = $1 AND user_id = $2`, teamID, userID)
 	if err != nil || result.RowsAffected() != 1 {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Вы не состоите в этой команде.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Вы не состоите в этой команде.")
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit team leave", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось выйти из команды. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось выйти из команды. Попробуйте позже.")
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (a *App) teamCaptainTransfer(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	publicID := c.Param("id")
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	targetID, targetOK := teamPositiveID(c.PostForm("user_id"))
 	if !ok || !targetOK {
 		if ok {
-			teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Выберите участника для передачи капитанства.")
+			teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Выберите участника для передачи капитанства.")
 		} else {
 			c.AbortWithStatus(http.StatusNotFound)
 		}
@@ -700,36 +735,37 @@ func (a *App) teamCaptainTransfer(c *gin.Context) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin captain transfer", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось передать капитанство. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось передать капитанство. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
 	team, err := teamLock(ctx, tx, teamID)
 	if err != nil || !teamManageable(team) || team.CaptainID != CurrentUser(c).ID {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Передача капитанства сейчас недоступна.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Передача капитанства сейчас недоступна.")
 		return
 	}
 	result, err := tx.Exec(ctx, `
 		UPDATE teams SET captain_user_id = $1, updated_at = now()
 		WHERE id = $2 AND EXISTS (SELECT 1 FROM team_members WHERE team_id = $2 AND user_id = $1)`, targetID, teamID)
 	if err != nil || result.RowsAffected() != 1 {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Капитанство можно передать только текущему участнику.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Капитанство можно передать только текущему участнику.")
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit captain transfer", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось передать капитанство. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось передать капитанство. Попробуйте позже.")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d", teamID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%s", publicID))
 }
 
 func (a *App) teamProductEditorToggle(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	publicID := c.Param("id")
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	targetID, targetOK := teamPositiveID(c.PostForm("user_id"))
 	if !ok || !targetOK {
 		if ok {
-			teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Выберите участника.")
+			teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Выберите участника.")
 		} else {
 			c.AbortWithStatus(http.StatusNotFound)
 		}
@@ -739,28 +775,28 @@ func (a *App) teamProductEditorToggle(c *gin.Context) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin product editor toggle", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось изменить полномочия. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось изменить полномочия. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
 	team, err := teamLock(ctx, tx, teamID)
 	if err != nil || !teamManageable(team) || team.CaptainID != CurrentUser(c).ID {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Изменение полномочий сейчас недоступно.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Изменение полномочий сейчас недоступно.")
 		return
 	}
 	result, err := tx.Exec(ctx, `
 		UPDATE team_members SET is_product_editor = NOT is_product_editor
 		WHERE team_id = $1 AND user_id = $2`, teamID, targetID)
 	if err != nil || result.RowsAffected() != 1 {
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Полномочия можно изменить только текущему участнику.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Полномочия можно изменить только текущему участнику.")
 		return
 	}
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit product editor toggle", "error", err)
-		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось изменить полномочия. Попробуйте позже.")
+		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось изменить полномочия. Попробуйте позже.")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d", teamID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%s", publicID))
 }
 
 func (a *App) teamPublishedManageableJam(ctx context.Context, jamID int64) (bool, error) {
@@ -901,13 +937,13 @@ func (a *App) teamRemoveAvatar(name string) {
 	}
 }
 
-func (a *App) teamMutationLoadError(c *gin.Context, teamID int64, action string, err error) {
+func (a *App) teamMutationLoadError(c *gin.Context, publicID, action string, err error) {
 	if err == pgx.ErrNoRows {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	a.logger.Error("load team for mutation", "error", err)
-	teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось "+action+". Попробуйте позже.")
+	teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось "+action+". Попробуйте позже.")
 }
 
 func (a *App) teamRender(c *gin.Context, status int, templateName string, data teamPageView) {

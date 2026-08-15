@@ -37,7 +37,7 @@ func canDiscloseBumps(stage Stage) bool {
 }
 
 func (a *App) productBumps(c *gin.Context) {
-	productID, ok := teamPositiveID(c.Param("id"))
+	productID, ok := a.resolvePublicID(c, "id", "products")
 	if !ok {
 		bumpNotFound(c)
 		return
@@ -98,7 +98,7 @@ func (a *App) productBumps(c *gin.Context) {
 }
 
 func (a *App) bumpProduct(c *gin.Context) {
-	productID, ok := teamPositiveID(c.Param("id"))
+	productID, ok := a.resolvePublicID(c, "id", "products")
 	if !ok {
 		bumpNotFound(c)
 		return

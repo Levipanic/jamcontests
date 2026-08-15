@@ -3,11 +3,11 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
   <title>Продукты: {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css">
 </head><body><main class="dossier">
-  <article><p class="eyebrow">Раскрытые материалы / джем № {{.JamID}}</p><h1>Продукты</h1><p>{{.JamTitle}}</p></article>
+  <article><p class="eyebrow">Раскрытые материалы / джем № {{.PublicJamID}}</p><h1>Продукты</h1><p>{{.JamTitle}}</p></article>
   <section>{{if .Products}}<div class="product-index">{{range .Products}}<article>
-    <p class="eyebrow">Продукт № {{.ID}} / {{.TeamName}}</p><h2><a href="/products/{{.ID}}">{{.Title}}</a></h2>
+    <p class="eyebrow">Продукт № {{.PublicID}} / {{.TeamName}}</p><h2><a href="/products/{{.PublicID}}">{{.Title}}</a></h2>
     <p>Тема: <strong>{{.Theme}}</strong></p>{{if .Description}}<p class="product-copy">{{.Description}}</p>{{end}}
-    <div data-bump-product="{{.ID}}"><p>Бампы: <strong data-bump-count>{{.BumpCount}}</strong></p>{{if and $.User $.BumpsMutable}}<button type="button" data-bump-action>Бамп</button>{{else if $.BumpsMutable}}<a href="/login?next=/jams/{{$.JamID}}/products">Войдите, чтобы бампнуть</a>{{end}}<p role="status" data-bump-status></p></div>
+    <div data-bump-product="{{.PublicID}}"><p>Бампы: <strong data-bump-count>{{.BumpCount}}</strong></p>{{if and $.User $.BumpsMutable}}<button type="button" data-bump-action>Бамп</button>{{else if $.BumpsMutable}}<a href="/login?next=/jams/{{$.PublicJamID}}/products">Войдите, чтобы бампнуть</a>{{end}}<p role="status" data-bump-status></p></div>
   </article>{{end}}</div>{{else}}<p>Финально сданных продуктов нет.</p>{{end}}</section>
-  <p><a href="/jams/{{.JamID}}">Вернуться к джему</a></p>
+  <p><a href="/jams/{{.PublicJamID}}">Вернуться к джему</a></p>
 </main>{{if .BumpsMutable}}<script src="/static/js/bumps.js" defer></script>{{end}}</body></html>{{end}}

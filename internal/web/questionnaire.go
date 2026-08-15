@@ -52,6 +52,7 @@ type questionnairePageData struct {
 	User           *User
 	CSRFToken      string
 	JamID          int64
+	PublicJamID    string
 	JamTitle       string
 	Stage          Stage
 	Writable       bool
@@ -105,9 +106,8 @@ func (a *App) registerQuestionnaireRoutes(router *gin.Engine) {
 }
 
 func (a *App) questionnairePage(c *gin.Context) {
-	jamID, ok := questionnaireJamID(c)
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	user := CurrentUser(c)
@@ -143,6 +143,7 @@ func (a *App) questionnairePage(c *gin.Context) {
 		User:           user,
 		CSRFToken:      csrfToken(c),
 		JamID:          access.JamID,
+		PublicJamID:    c.Param("id"),
 		JamTitle:       access.JamTitle,
 		Stage:          access.Stage,
 		Writable:       access.Stage == StageUpcoming,
@@ -155,9 +156,8 @@ func (a *App) questionnairePage(c *gin.Context) {
 }
 
 func (a *App) questionnaireAutosave(c *gin.Context) {
-	jamID, ok := questionnaireJamID(c)
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		questionnaireJSONError(c, http.StatusNotFound, "Анкета не найдена.")
 		return
 	}
 	input, err := questionnaireParseAutosave(c)
@@ -260,11 +260,11 @@ func (a *App) questionnaireAutosave(c *gin.Context) {
 }
 
 func (a *App) questionnaireComplete(c *gin.Context) {
-	jamID, ok := questionnaireJamID(c)
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	publicJamID := c.Param("id")
 	tx, err := a.pool.Begin(c.Request.Context())
 	if err != nil {
 		a.logger.Error("begin questionnaire completion", "error", err)
@@ -285,7 +285,7 @@ func (a *App) questionnaireComplete(c *gin.Context) {
 		return
 	}
 	if access.Stage != StageUpcoming {
-		questionnaireRedirect(c, jamID, "error", "Завершить анкету можно только до начала приёма работ.")
+		questionnaireRedirect(c, publicJamID, "error", "Завершить анкету можно только до начала приёма работ.")
 		return
 	}
 
@@ -299,7 +299,7 @@ func (a *App) questionnaireComplete(c *gin.Context) {
 	if err != nil {
 		var validationErr *questionnaireValidationError
 		if errors.As(err, &validationErr) {
-			questionnaireRedirect(c, jamID, "error", validationErr.Error())
+			questionnaireRedirect(c, publicJamID, "error", validationErr.Error())
 		} else {
 			a.logger.Error("validate questionnaire completion", "error", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -326,12 +326,12 @@ func (a *App) questionnaireComplete(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	questionnaireRedirect(c, jamID, "completed", "1")
+	questionnaireRedirect(c, publicJamID, "completed", "1")
 }
 
-func questionnaireJamID(c *gin.Context) (int64, bool) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	return id, err == nil && id > 0
+func questionnaireRedirect(c *gin.Context, publicJamID, key, value string) {
+	location := fmt.Sprintf("/jams/%s/questionnaire?%s=%s", publicJamID, url.QueryEscape(key), url.QueryEscape(value))
+	c.Redirect(http.StatusSeeOther, location)
 }
 
 type questionnaireQueryRower interface {
@@ -814,9 +814,4 @@ func questionnaireJSONError(c *gin.Context, status int, message string) {
 func (a *App) questionnaireInternalJSONError(c *gin.Context, operation string, err error) {
 	a.logger.Error(operation, "error", err)
 	questionnaireJSONError(c, http.StatusInternalServerError, "Не удалось сохранить ответ. Попробуйте позже.")
-}
-
-func questionnaireRedirect(c *gin.Context, jamID int64, key, value string) {
-	location := fmt.Sprintf("/jams/%d/questionnaire?%s=%s", jamID, url.QueryEscape(key), url.QueryEscape(value))
-	c.Redirect(http.StatusSeeOther, location)
 }

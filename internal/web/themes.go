@@ -400,42 +400,42 @@ func (a *App) adminTeamThemeSelect(c *gin.Context) {
 }
 
 func (a *App) teamThemeSelect(c *gin.Context) {
-	teamID, ok := teamPositiveID(c.Param("id"))
+	teamID, ok := a.resolvePublicID(c, "id", "teams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	publicTeamID := c.Param("id")
 	themeID, ok := positiveFormID(c.PostForm("theme_id"))
 	if !ok {
-		themeSelectionRedirectError(c, teamID, "Выберите тему.")
+		themeSelectionRedirectError(c, publicTeamID, "Выберите тему.")
 		return
 	}
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		a.logger.Error("begin theme selection", "error", err)
-		themeSelectionRedirectError(c, teamID, "Не удалось выбрать тему. Попробуйте позже.")
+		themeSelectionRedirectError(c, publicTeamID, "Не удалось выбрать тему. Попробуйте позже.")
 		return
 	}
 	defer tx.Rollback(ctx)
 	team, err := teamLock(ctx, tx, teamID)
 	if err != nil {
 		// Do not distinguish hidden teams or draft jams from unavailable selection.
-		themeSelectionRedirectError(c, teamID, "Выбор темы сейчас недоступен.")
+		themeSelectionRedirectError(c, publicTeamID, "Выбор темы сейчас недоступен.")
 		return
 	}
 	user := CurrentUser(c)
 	if team.CaptainID != user.ID || teamEffectiveStage(team) != StageSubmission {
-		themeSelectionRedirectError(c, teamID, "Выбор темы сейчас недоступен.")
+		themeSelectionRedirectError(c, publicTeamID, "Выбор темы сейчас недоступен.")
 		return
 	}
 	var member, eligible bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM team_members WHERE team_id=$1 AND jam_id=$2 AND user_id=$3)`, teamID, team.JamID, user.ID).Scan(&member); err != nil {
-		a.themeSelectionFailure(c, teamID, err)
+		a.themeSelectionFailure(c, publicTeamID, err)
 		return
 	}
 	if !member {
-		themeSelectionRedirectError(c, teamID, "Выбор темы сейчас недоступен.")
+		themeSelectionRedirectError(c, publicTeamID, "Выбор темы сейчас недоступен.")
 		return
 	}
 	if err = tx.QueryRow(ctx, `
@@ -446,20 +446,20 @@ func (a *App) teamThemeSelect(c *gin.Context) {
 			  AND r.user_id=member.user_id AND r.status='completed'
 			WHERE member.team_id=$1
 		) OR COALESCE((SELECT allowed FROM team_eligibility_overrides WHERE team_id=$1), false)`, teamID).Scan(&eligible); err != nil {
-		a.themeSelectionFailure(c, teamID, err)
+		a.themeSelectionFailure(c, publicTeamID, err)
 		return
 	}
 	if !eligible {
-		themeSelectionRedirectError(c, teamID, "Для выбора темы команда должна получить допуск.")
+		themeSelectionRedirectError(c, publicTeamID, "Для выбора темы команда должна получить допуск.")
 		return
 	}
 	var lockedThemeID int64
 	if err = tx.QueryRow(ctx, `SELECT id FROM jam_themes WHERE id=$1 AND jam_id=$2 AND withdrawn_at IS NULL FOR SHARE`, themeID, team.JamID).Scan(&lockedThemeID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			themeSelectionRedirectError(c, teamID, "Выбранная тема недоступна.")
+			themeSelectionRedirectError(c, publicTeamID, "Выбранная тема недоступна.")
 			return
 		}
-		a.themeSelectionFailure(c, teamID, err)
+		a.themeSelectionFailure(c, publicTeamID, err)
 		return
 	}
 	_, err = tx.Exec(ctx, `
@@ -468,11 +468,11 @@ func (a *App) teamThemeSelect(c *gin.Context) {
 		ON CONFLICT (team_id) DO UPDATE SET theme_id=EXCLUDED.theme_id,
 			selected_by_user_id=EXCLUDED.selected_by_user_id, updated_at=now()`, teamID, team.JamID, themeID, user.ID)
 	if err != nil {
-		a.themeSelectionFailure(c, teamID, err)
+		a.themeSelectionFailure(c, publicTeamID, err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
-		a.themeSelectionFailure(c, teamID, err)
+		a.themeSelectionFailure(c, publicTeamID, err)
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/#jam")
@@ -613,11 +613,11 @@ func (a *App) themeAdminFailure(c *gin.Context, operation string, err error) {
 	a.writeError(c, http.StatusInternalServerError, "Не удалось выполнить административное действие.")
 }
 
-func (a *App) themeSelectionFailure(c *gin.Context, teamID int64, err error) {
+func (a *App) themeSelectionFailure(c *gin.Context, publicTeamID string, err error) {
 	a.logger.Error("select team theme", "error", err)
-	themeSelectionRedirectError(c, teamID, "Не удалось выбрать тему. Попробуйте позже.")
+	themeSelectionRedirectError(c, publicTeamID, "Не удалось выбрать тему. Попробуйте позже.")
 }
 
-func themeSelectionRedirectError(c *gin.Context, teamID int64, message string) {
-	teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), message)
+func themeSelectionRedirectError(c *gin.Context, publicTeamID, message string) {
+	teamRedirectError(c, fmt.Sprintf("/teams/%s", publicTeamID), message)
 }

@@ -67,10 +67,10 @@ func TestVotingTemplateShowsBallotWithoutNominationAuthor(t *testing.T) {
 		t.Fatal(err)
 	}
 	nomination := NominationView{
-		ID: 8, Kind: "team", Title: "Лучший сигнал", AuthorTeamName: "HIDDEN AUTHOR",
+		ID: 8, PublicID: "aaaaaaaaaaaaaaaaaa", Kind: "team", Title: "Лучший сигнал", AuthorTeamName: "HIDDEN AUTHOR",
 		Products: []VotingProductView{
-			{ID: 11, Title: "Открытый продукт", TeamName: "Команда A", VoteCount: 4, Selected: true},
-			{ID: 12, Title: "Свой продукт", TeamName: "Команда B", VoteCount: 1, OwnProduct: true},
+			{ID: 11, PublicID: "bbbbbbbbbbbbbbbbbb", Title: "Открытый продукт", TeamName: "Команда A", VoteCount: 4, Selected: true},
+			{ID: 12, PublicID: "cccccccccccccccccc", Title: "Свой продукт", TeamName: "Команда B", VoteCount: 1, OwnProduct: true},
 		},
 	}
 	var output bytes.Buffer
@@ -80,8 +80,8 @@ func TestVotingTemplateShowsBallotWithoutNominationAuthor(t *testing.T) {
 	}
 	html := output.String()
 	for _, required := range []string{
-		`data-vote-nomination="8"`, `data-vote-product="11"`, `value="11" checked`,
-		`data-vote-product="12"`, `value="12"  disabled`, `data-vote-count`,
+		`data-vote-nomination="aaaaaaaaaaaaaaaaaa"`, `data-vote-product="bbbbbbbbbbbbbbbbbb"`, `value="bbbbbbbbbbbbbbbbbb" checked`,
+		`data-vote-product="cccccccccccccccccc"`, `value="cccccccccccccccccc"  disabled`, `data-vote-count`,
 		`/static/js/voting.js`, "Сохранить голос", "Открытый продукт", ">4</strong>",
 	} {
 		if !strings.Contains(html, required) {

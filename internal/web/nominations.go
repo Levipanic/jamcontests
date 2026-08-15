@@ -14,6 +14,7 @@ import (
 
 type NominationView struct {
 	ID             int64
+	PublicID       string
 	Kind           string
 	Title          string
 	AuthorTeamName string
@@ -27,21 +28,25 @@ type NominationResultView struct {
 }
 
 type NominationWinnerView struct {
-	ProductID    int64
-	ProductTitle string
-	TeamID       int64
-	TeamName     string
-	VoteCount    int64
+	ProductID       int64
+	PublicProductID string
+	ProductTitle    string
+	TeamID          int64
+	PublicTeamID    string
+	TeamName        string
+	VoteCount       int64
 }
 
 type VotingProductView struct {
-	ID         int64
-	Title      string
-	TeamID     int64
-	TeamName   string
-	VoteCount  int64
-	Selected   bool
-	OwnProduct bool
+	ID           int64
+	PublicID     string
+	Title        string
+	TeamID       int64
+	PublicTeamID string
+	TeamName     string
+	VoteCount    int64
+	Selected     bool
+	OwnProduct   bool
 }
 
 type adminNomination struct {
@@ -56,6 +61,7 @@ type nominationsPageData struct {
 	User        *User
 	CSRFToken   string
 	JamID       int64
+	PublicJamID string
 	JamTitle    string
 	Stage       Stage
 	Nominations []NominationView
@@ -88,11 +94,12 @@ func canAdminMutateNominations(stage Stage) bool {
 }
 
 func (a *App) nominationsList(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	publicJamID := c.Param("id")
 	jamTitle, stage, err := a.loadPublishedJamStage(c.Request.Context(), jamID)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && !canDiscloseNominations(stage) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -103,7 +110,7 @@ func (a *App) nominationsList(c *gin.Context) {
 		return
 	}
 	query := `
-		SELECT nomination.id, nomination.kind, nomination.title
+		SELECT nomination.id, nomination.public_id, nomination.kind, nomination.title
 		FROM nominations nomination
 		WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
 		  AND (nomination.kind='curator' OR EXISTS (
@@ -114,7 +121,7 @@ func (a *App) nominationsList(c *gin.Context) {
 		ORDER BY nomination.created_at, nomination.id`
 	if stage == StageFinished {
 		query = `
-			SELECT nomination.id, nomination.kind, nomination.title, COALESCE(team.name, '')
+			SELECT nomination.id, nomination.public_id, nomination.kind, nomination.title, COALESCE(team.name, '')
 			FROM nominations nomination
 			LEFT JOIN teams team ON team.id=nomination.author_team_id AND team.jam_id=nomination.jam_id
 			WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
@@ -135,9 +142,9 @@ func (a *App) nominationsList(c *gin.Context) {
 	for rows.Next() {
 		var nomination NominationView
 		if stage == StageFinished {
-			err = rows.Scan(&nomination.ID, &nomination.Kind, &nomination.Title, &nomination.AuthorTeamName)
+			err = rows.Scan(&nomination.ID, &nomination.PublicID, &nomination.Kind, &nomination.Title, &nomination.AuthorTeamName)
 		} else {
-			err = rows.Scan(&nomination.ID, &nomination.Kind, &nomination.Title)
+			err = rows.Scan(&nomination.ID, &nomination.PublicID, &nomination.Kind, &nomination.Title)
 		}
 		if err != nil {
 			a.nominationFailure(c, "scan public nomination", err)
@@ -174,7 +181,7 @@ func (a *App) nominationsList(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, c.Request.URL.Path)
 		return
 	}
-	c.HTML(http.StatusOK, "nominations_list.html", nominationsPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, JamTitle: jamTitle, Stage: stage, Nominations: nominations})
+	c.HTML(http.StatusOK, "nominations_list.html", nominationsPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, PublicJamID: publicJamID, JamTitle: jamTitle, Stage: stage, Nominations: nominations})
 }
 
 func (a *App) populateFinishedResults(ctx context.Context, jamID int64, nominations []NominationView) error {
@@ -212,7 +219,7 @@ func (a *App) populateFinishedResults(ctx context.Context, jamID int64, nominati
 			FROM vote_counts GROUP BY nomination_id
 		)
 		SELECT nomination.id, COALESCE(maxima.total_votes, 0), winner.product_id,
-		       product.title, product.team_id, team.name, winner.vote_count
+		       product.public_id, product.title, product.team_id, team.public_id, team.name, winner.vote_count
 		FROM public_nominations nomination
 		LEFT JOIN maxima ON maxima.nomination_id=nomination.id
 		LEFT JOIN vote_counts winner ON winner.nomination_id=nomination.id
@@ -227,8 +234,8 @@ func (a *App) populateFinishedResults(ctx context.Context, jamID int64, nominati
 	for rows.Next() {
 		var nominationID, totalVotes int64
 		var productID, teamID, voteCount *int64
-		var productTitle, teamName *string
-		if err = rows.Scan(&nominationID, &totalVotes, &productID, &productTitle, &teamID, &teamName, &voteCount); err != nil {
+		var productPublicID, teamPublicID, productTitle, teamName *string
+		if err = rows.Scan(&nominationID, &totalVotes, &productID, &productPublicID, &productTitle, &teamID, &teamPublicID, &teamName, &voteCount); err != nil {
 			return err
 		}
 		index, ok := indexes[nominationID]
@@ -238,8 +245,8 @@ func (a *App) populateFinishedResults(ctx context.Context, jamID int64, nominati
 		nominations[index].Result.TotalVotes = totalVotes
 		if productID != nil && productTitle != nil && teamID != nil && teamName != nil && voteCount != nil {
 			nominations[index].Result.Winners = append(nominations[index].Result.Winners, NominationWinnerView{
-				ProductID: *productID, ProductTitle: *productTitle, TeamID: *teamID,
-				TeamName: *teamName, VoteCount: *voteCount,
+				ProductID: *productID, PublicProductID: *productPublicID, ProductTitle: *productTitle,
+				TeamID: *teamID, PublicTeamID: *teamPublicID, TeamName: *teamName, VoteCount: *voteCount,
 			})
 		}
 	}
@@ -252,7 +259,7 @@ func (a *App) populateVotingProducts(ctx context.Context, jamID int64, user *Use
 		userID = user.ID
 	}
 	rows, err := a.pool.Query(ctx, `
-		SELECT product.id, product.title, team.id, team.name,
+		SELECT product.id, product.public_id, product.title, team.id, team.public_id, team.name,
 		       EXISTS (
 		           SELECT 1 FROM team_members member
 		           WHERE member.jam_id=product.jam_id AND member.team_id=product.team_id
@@ -273,7 +280,7 @@ func (a *App) populateVotingProducts(ctx context.Context, jamID int64, user *Use
 	var products []VotingProductView
 	for rows.Next() {
 		var product VotingProductView
-		if err = rows.Scan(&product.ID, &product.Title, &product.TeamID, &product.TeamName, &product.OwnProduct); err != nil {
+		if err = rows.Scan(&product.ID, &product.PublicID, &product.Title, &product.TeamID, &product.PublicTeamID, &product.TeamName, &product.OwnProduct); err != nil {
 			rows.Close()
 			return err
 		}

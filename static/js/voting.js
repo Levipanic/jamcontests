@@ -49,7 +49,7 @@
         const response = await fetch(`/api/jams/${ballot.dataset.voteJam}/nominations/${ballot.dataset.voteNomination}/vote`, {
           method: "POST",
           headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrf },
-          body: JSON.stringify({ product_id: Number(selected.value) })
+          body: JSON.stringify({ product_id: selected.value })
         });
         const data = await response.json().catch(() => ({}));
         status.textContent = response.ok ? "Голос учтён." : (data.error || "Не удалось сохранить голос.");

@@ -60,7 +60,7 @@ func TestFinishedNominationResultsSingleTieAndZero(t *testing.T) {
 
 	router := New(publicTestConfig(t), pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/jams/"+formatID(fixture.jamID)+"/nominations", nil))
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/jams/"+fixture.jamPublic+"/nominations", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("finished results status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -76,7 +76,7 @@ func TestFinishedNominationResultsSingleTieAndZero(t *testing.T) {
 		}
 	}
 	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil))
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamPublic), nil))
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("finished live counts status=%d, want 404", recorder.Code)
 	}

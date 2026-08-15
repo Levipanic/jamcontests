@@ -66,12 +66,12 @@ func TestPublicJamArchiveDisclosure(t *testing.T) {
 	pool := testdb.Open(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	autoFinishedID := insertPublicTestJam(t, ctx, pool, "AUTO FINISHED", "published", nil,
+	_, autoFinishedPublic := insertPublicTestJam(t, ctx, pool, "AUTO FINISHED", "published", nil,
 		"2025-01-01T09:00:00Z", "2025-01-01T10:00:00Z", "2025-01-01T11:00:00Z", "2025-01-01T12:00:00Z")
 	finished := "finished"
-	overrideFinishedID := insertPublicTestJam(t, ctx, pool, "OVERRIDE FINISHED", "published", &finished,
+	_, overrideFinishedPublic := insertPublicTestJam(t, ctx, pool, "OVERRIDE FINISHED", "published", &finished,
 		"2030-01-01T09:00:00Z", "2030-01-01T10:00:00Z", "2030-01-01T11:00:00Z", "2030-01-01T12:00:00Z")
-	draftID := insertPublicTestJam(t, ctx, pool, "HIDDEN DRAFT", "draft", &finished,
+	_, draftPublic := insertPublicTestJam(t, ctx, pool, "HIDDEN DRAFT", "draft", &finished,
 		"2031-01-01T09:00:00Z", "2031-01-01T10:00:00Z", "2031-01-01T11:00:00Z", "2031-01-01T12:00:00Z")
 	voting := "voting"
 	insertPublicTestJam(t, ctx, pool, "REACTIVATED", "published", &voting,
@@ -84,7 +84,7 @@ func TestPublicJamArchiveDisclosure(t *testing.T) {
 		t.Fatalf("archive status = %d", recorder.Code)
 	}
 	html := recorder.Body.String()
-	for _, visible := range []string{"AUTO FINISHED", "OVERRIDE FINISHED", "/jams/" + formatID(autoFinishedID), "/jams/" + formatID(overrideFinishedID)} {
+	for _, visible := range []string{"AUTO FINISHED", "OVERRIDE FINISHED", "/jams/" + autoFinishedPublic, "/jams/" + overrideFinishedPublic} {
 		if !strings.Contains(html, visible) {
 			t.Errorf("archive lacks %q", visible)
 		}
@@ -96,12 +96,12 @@ func TestPublicJamArchiveDisclosure(t *testing.T) {
 	}
 
 	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/jams/"+formatID(autoFinishedID), nil))
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/jams/"+autoFinishedPublic, nil))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "AUTO FINISHED") || !strings.Contains(recorder.Body.String(), "01.01.2025 15:00 МСК") {
 		t.Fatalf("finished jam detail status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/jams/"+formatID(draftID), nil))
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/jams/"+draftPublic, nil))
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("draft jam detail status = %d, want 404", recorder.Code)
 	}
@@ -116,17 +116,18 @@ func publicTestConfig(t *testing.T) config.Config {
 	}
 }
 
-func insertPublicTestJam(t *testing.T, ctx context.Context, pool *pgxpool.Pool, title, visibility string, override *string, submission, evaluation, voting, finishes string) int64 {
+func insertPublicTestJam(t *testing.T, ctx context.Context, pool *pgxpool.Pool, title, visibility string, override *string, submission, evaluation, voting, finishes string) (int64, string) {
 	t.Helper()
 	var id int64
+	var publicID string
 	if err := pool.QueryRow(ctx, `
 		INSERT INTO jams (title, visibility, submission_starts_at, evaluation_starts_at, voting_starts_at, finishes_at, status_override, max_team_size)
-		VALUES ($1, $2, $3::timestamptz, $4::timestamptz, $5::timestamptz, $6::timestamptz, $7, 5) RETURNING id`,
-		title, visibility, submission, evaluation, voting, finishes, override).Scan(&id); err != nil {
+		VALUES ($1, $2, $3::timestamptz, $4::timestamptz, $5::timestamptz, $6::timestamptz, $7, 5) RETURNING id, public_id`,
+		title, visibility, submission, evaluation, voting, finishes, override).Scan(&id, &publicID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO jam_themes (jam_id, phrase) VALUES ($1, $2)`, id, "Theme "+formatID(id)); err != nil {
 		t.Fatal(err)
 	}
-	return id
+	return id, publicID
 }

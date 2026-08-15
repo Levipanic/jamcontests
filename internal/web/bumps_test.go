@@ -97,7 +97,7 @@ func TestBumpTemplatesShowCountsWithoutPrivateProductFields(t *testing.T) {
 	}
 	user := &User{ID: 7, Username: "user"}
 	product := ProductView{
-		ID: 11, JamID: 2, TeamID: 3, TeamName: "Team", Title: "Result",
+		ID: 11, PublicID: "bbbbbbbbbbbbbbbbbb", JamID: 2, TeamID: 3, TeamName: "Team", Title: "Result",
 		ResultURL: "https://example.test/result", Theme: "Theme", BumpCount: 42,
 		Notes: "PRIVATE NOTES", NominationTitle: "PRIVATE NOMINATION",
 	}
@@ -115,7 +115,7 @@ func TestBumpTemplatesShowCountsWithoutPrivateProductFields(t *testing.T) {
 				t.Fatal(err)
 			}
 			html := output.String()
-			for _, required := range []string{`data-bump-product="11"`, `data-bump-count`, `data-bump-action`, `>42</strong>`, `/static/js/bumps.js`, `meta name="csrf-token"`} {
+			for _, required := range []string{`data-bump-product="bbbbbbbbbbbbbbbbbb"`, `data-bump-count`, `data-bump-action`, `>42</strong>`, `/static/js/bumps.js`, `meta name="csrf-token"`} {
 				if !strings.Contains(html, required) {
 					t.Errorf("rendered template lacks %q", required)
 				}

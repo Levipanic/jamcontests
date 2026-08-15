@@ -65,12 +65,12 @@ func TestAdminVoteAndBumpInterventionsAffectAuthoritativeCounts(t *testing.T) {
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/bumps/"+formatID(bumpID)+"/invalidate", "invalidate")
 
 	counts := httptest.NewRecorder()
-	router.ServeHTTP(counts, httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil))
+	router.ServeHTTP(counts, httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamPublic), nil))
 	if counts.Code != http.StatusOK || strings.Contains(counts.Body.String(), `"count":1`) {
 		t.Fatalf("invalidated vote remained counted: %s", counts.Body.String())
 	}
 	bumpCounts := httptest.NewRecorder()
-	router.ServeHTTP(bumpCounts, httptest.NewRequest(http.MethodGet, "/api/products/"+formatID(fixture.productBID)+"/bumps", nil))
+	router.ServeHTTP(bumpCounts, httptest.NewRequest(http.MethodGet, "/api/products/"+fixture.productBPublic+"/bumps", nil))
 	if bumpCounts.Code != http.StatusOK || !strings.Contains(bumpCounts.Body.String(), `"count":0`) {
 		t.Fatalf("invalidated bumps remained counted: %s", bumpCounts.Body.String())
 	}
@@ -78,19 +78,19 @@ func TestAdminVoteAndBumpInterventionsAffectAuthoritativeCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	newBumpCounts := httptest.NewRecorder()
-	router.ServeHTTP(newBumpCounts, httptest.NewRequest(http.MethodGet, "/api/products/"+formatID(fixture.productBID)+"/bumps", nil))
+	router.ServeHTTP(newBumpCounts, httptest.NewRequest(http.MethodGet, "/api/products/"+fixture.productBPublic+"/bumps", nil))
 	if newBumpCounts.Code != http.StatusOK || !strings.Contains(newBumpCounts.Body.String(), `"count":1`) {
 		t.Fatalf("new bump after invalidation not counted: %s", newBumpCounts.Body.String())
 	}
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/bumps/"+formatID(bumpID)+"/invalidate", "invalidate")
 
 	voterSession := insertQuestionnaireReportSession(t, ctx, pool, "test_session", fixture.voterID, 22)
-	voterCSRFRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil)
+	voterCSRFRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamPublic), nil)
 	voterCSRFRequest.AddCookie(voterSession)
 	voterCSRFResponse := httptest.NewRecorder()
 	router.ServeHTTP(voterCSRFResponse, voterCSRFRequest)
 	voterCSRF := responseCookie(t, voterCSRFResponse.Result(), csrfCookieName)
-	newVote := performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productCID, voterCSRF, voterSession)
+	newVote := performVoteRequest(router, fixture.jamPublic, fixture.nominationPublic, fixture.productCPublic, voterCSRF, voterSession)
 	if newVote.Code != http.StatusOK {
 		t.Fatalf("new vote after invalidation status=%d body=%s", newVote.Code, newVote.Body.String())
 	}

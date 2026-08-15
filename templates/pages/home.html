@@ -29,7 +29,7 @@
       {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
       {{if .Jam}}
         <div class="case-heading">
-          <p class="eyebrow">Опубликованное дело / № {{.Jam.ID}}</p>
+          <p class="eyebrow">Опубликованное дело / № {{.Jam.PublicID}}</p>
           <h1 id="jam-title">{{.Jam.Title}}</h1>
           {{if .Jam.Description}}<p class="lede">{{.Jam.Description}}</p>{{end}}
         </div>
@@ -67,16 +67,16 @@
           {{if and .SelectedTheme .Profile}}<p>Тема вашей команды: <strong>{{.SelectedTheme.Phrase}}</strong></p>{{end}}
           {{if and (eq .Jam.Stage "submission") .Profile .Profile.IsCaptain}}
             {{if .Profile.Eligible}}
-              {{if .Themes}}<form method="post" action="/teams/{{.Profile.TeamID}}/theme" class="paper-form"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Тема команды<select name="theme_id" required><option value="">Выберите тему</option>{{range .Themes}}<option value="{{.ID}}" {{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}}selected{{end}}>{{.Phrase}}</option>{{end}}</select></label><button type="submit">{{if .SelectedTheme}}Изменить тему{{else}}Выбрать тему{{end}}</button></form>{{end}}
+              {{if .Themes}}<form method="post" action="/teams/{{.Profile.TeamPublicID}}/theme" class="paper-form"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Тема команды<select name="theme_id" required><option value="">Выберите тему</option>{{range .Themes}}<option value="{{.ID}}" {{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}}selected{{end}}>{{.Phrase}}</option>{{end}}</select></label><button type="submit">{{if .SelectedTheme}}Изменить тему{{else}}Выбрать тему{{end}}</button></form>{{end}}
             {{else}}<p class="section-note">Выбор темы станет доступен после получения командой допуска.</p>{{end}}
           {{end}}
         </section>
         {{end}}
         {{if or (eq .Jam.Stage "evaluation") (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
-        <p><a class="action secondary" href="/jams/{{.Jam.ID}}/products">Продукты джема</a></p>
+        <p><a class="action secondary" href="/jams/{{.Jam.PublicID}}/products">Продукты джема</a></p>
         {{end}}
         {{if or (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
-        <p><a class="action secondary" href="/jams/{{.Jam.ID}}/nominations">Номинации джема</a></p>
+        <p><a class="action secondary" href="/jams/{{.Jam.PublicID}}/nominations">Номинации джема</a></p>
         {{end}}
         <p><a href="/archive">Архив завершённых джемов</a></p>
       {{else}}
@@ -95,14 +95,14 @@
         <div><p class="eyebrow">Картотека участников</p><h2 id="teams-title">Команды</h2></div>
         {{if .Jam}}
           {{if .User}}
-            {{if and .Profile (eq .Profile.TeamID 0)}}
-              {{if or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")}}<a class="action" href="/jams/{{.Jam.ID}}/teams/new">Создать команду</a>{{end}}
-            {{else if and .Profile .Profile.TeamID}}<a class="action secondary" href="/teams/{{.Profile.TeamID}}">Моя команда</a>{{end}}
+            {{if and .Profile (eq .Profile.TeamPublicID "")}}
+              {{if or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")}}<a class="action" href="/jams/{{.Jam.PublicID}}/teams/new">Создать команду</a>{{end}}
+            {{else if and .Profile .Profile.TeamPublicID}}<a class="action secondary" href="/teams/{{.Profile.TeamPublicID}}">Моя команда</a>{{end}}
           {{else}}
-            {{if or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")}}<a class="action" href="/login?next=/jams/{{.Jam.ID}}/teams/new" data-auth-required data-next="/jams/{{.Jam.ID}}/teams/new">Создать команду</a>{{end}}
+            {{if or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")}}<a class="action" href="/login?next=/jams/{{.Jam.PublicID}}/teams/new" data-auth-required data-next="/jams/{{.Jam.PublicID}}/teams/new">Создать команду</a>{{end}}
           {{end}}
           {{if and .User (not .Profile)}}<p class="section-note">Не удалось определить членство. Обновите страницу.</p>{{end}}
-          {{if and .User .Profile (eq .Profile.TeamID 0) (not (or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")))}}<p class="section-note">Создание команд закрыто на текущей стадии.</p>{{end}}
+          {{if and .User .Profile (eq .Profile.TeamPublicID "") (not (or (eq .Jam.Stage "upcoming") (eq .Jam.Stage "submission")))}}<p class="section-note">Создание команд закрыто на текущей стадии.</p>{{end}}
         {{else}}
           <p class="section-note">Создать команду можно после публикации активного джема.</p>
         {{end}}
@@ -111,8 +111,8 @@
       {{if and .Jam .Teams}}
       <div class="folder-scroll" tabindex="0" aria-label="Горизонтальный список команд">
         {{range .Teams}}
-        <a class="team-folder {{if .IsOwn}}own{{end}}" href="/teams/{{.ID}}">
-          <span class="folder-tab">Дело № {{.ID}}</span>
+        <a class="team-folder {{if .IsOwn}}own{{end}}" href="/teams/{{.PublicID}}">
+          <span class="folder-tab">Дело № {{.PublicID}}</span>
           <span class="folder-body">
             {{if .AvatarPath}}<img src="/avatars/{{.AvatarPath}}" alt="" width="72" height="72" loading="lazy">{{else}}<span class="avatar-placeholder" aria-hidden="true">JC</span>{{end}}
             <span class="folder-copy">
@@ -139,8 +139,8 @@
           <dl>
             <dt>Позывной</dt><dd>{{.User.Username}}</dd>
             <dt>Контакт</dt><dd>{{if .User.Email}}{{.User.Email}}{{else}}не указан{{end}}</dd>
-            {{if and .Profile .Profile.TeamID}}<dt>Команда</dt><dd><a href="/teams/{{.Profile.TeamID}}">{{.Profile.TeamName}}</a>, {{.Profile.TeamRole}}</dd>
-            <dt>Анкета</dt><dd>{{if eq .Jam.Stage "upcoming"}}<a href="/jams/{{.Jam.ID}}/questionnaire">{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}</a>{{else}}{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}{{end}}</dd>
+            {{if and .Profile .Profile.TeamPublicID}}<dt>Команда</dt><dd><a href="/teams/{{.Profile.TeamPublicID}}">{{.Profile.TeamName}}</a>, {{.Profile.TeamRole}}</dd>
+            <dt>Анкета</dt><dd>{{if eq .Jam.Stage "upcoming"}}<a href="/jams/{{.Jam.PublicID}}/questionnaire">{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}</a>{{else}}{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}{{end}}</dd>
             <dt>Допуск</dt><dd>{{if .Profile.Eligible}}получен{{else}}не получен{{end}}</dd>{{end}}
           </dl>
         </article>

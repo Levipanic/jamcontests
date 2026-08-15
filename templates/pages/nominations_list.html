@@ -4,20 +4,20 @@
   <meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
   <title>Номинации · {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css">
 </head><body><main class="dossier">
-  <header class="case-heading"><p class="eyebrow">Опубликованное дело / джем № {{.JamID}}</p><h1>Номинации · {{.JamTitle}}</h1></header>
+  <header class="case-heading"><p class="eyebrow">Опубликованное дело / джем № {{.PublicJamID}}</p><h1>Номинации · {{.JamTitle}}</h1></header>
   {{if .Nominations}}
   {{if eq .Stage "voting"}}
   <section class="ballot-list" aria-label="Бюллетени номинаций">
-    {{range .Nominations}}{{$nomination := .}}<article class="paper-card ballot" data-vote-nomination="{{.ID}}" data-vote-jam="{{$.JamID}}">
+    {{range .Nominations}}{{$nomination := .}}<article class="paper-card ballot" data-vote-nomination="{{.PublicID}}" data-vote-jam="{{$.PublicJamID}}">
       <p class="eyebrow">Номинация{{if eq .Kind "curator"}} / кураторская{{end}}</p><h2>{{.Title}}</h2>
       {{if .Products}}<fieldset><legend>Выберите один продукт</legend>
-        {{range .Products}}<label class="ballot-option" data-vote-product="{{.ID}}">
-          <input type="radio" name="nomination-{{$nomination.ID}}" value="{{.ID}}" {{if .Selected}}checked{{end}} {{if .OwnProduct}}disabled{{end}}>
-          <span><a href="/products/{{.ID}}">{{.Title}}</a><small>Команда: {{.TeamName}}{{if .OwnProduct}} / ваш продукт{{end}}</small></span>
+        {{range .Products}}<label class="ballot-option" data-vote-product="{{.PublicID}}">
+          <input type="radio" name="nomination-{{$nomination.PublicID}}" value="{{.PublicID}}" {{if .Selected}}checked{{end}} {{if .OwnProduct}}disabled{{end}}>
+          <span><a href="/products/{{.PublicID}}">{{.Title}}</a><small>Команда: {{.TeamName}}{{if .OwnProduct}} / ваш продукт{{end}}</small></span>
           <strong data-vote-count>{{.VoteCount}}</strong>
         </label>{{end}}
       </fieldset>
-      {{if $.User}}<button type="button" data-vote-action>Сохранить голос</button>{{else}}<a href="/login?next=/jams/{{$.JamID}}/nominations">Войти, чтобы голосовать</a>{{end}}
+      {{if $.User}}<button type="button" data-vote-action>Сохранить голос</button>{{else}}<a href="/login?next=/jams/{{$.PublicJamID}}/nominations">Войти, чтобы голосовать</a>{{end}}
       <p role="status" data-vote-status></p>
       {{else}}<p class="empty-row">Нет доступных продуктов.</p>{{end}}
     </article>{{end}}
@@ -29,7 +29,7 @@
       {{if eq .Kind "team"}}<p>Автор номинации: {{.AuthorTeamName}}</p>{{end}}
       {{if and .Result (gt .Result.TotalVotes 0)}}<p>Всего голосов: {{.Result.TotalVotes}}</p>
         <div class="winner-list">{{range .Result.Winners}}<article class="winner-card"><span class="winner-stamp">Победитель номинации</span>
-          <h3><a href="/products/{{.ProductID}}">{{.ProductTitle}}</a></h3><p>Команда: <a href="/teams/{{.TeamID}}">{{.TeamName}}</a></p><p>Голосов: <strong>{{.VoteCount}}</strong></p>
+          <h3><a href="/products/{{.PublicProductID}}">{{.ProductTitle}}</a></h3><p>Команда: <a href="/teams/{{.PublicTeamID}}">{{.TeamName}}</a></p><p>Голосов: <strong>{{.VoteCount}}</strong></p>
         </article>{{end}}</div>
       {{else}}<p class="empty-row">Голоса в этой номинации не поданы. Победитель не определён.</p>{{end}}
     </article>{{end}}
@@ -40,5 +40,5 @@
   </section>
   {{end}}
   {{else}}<p class="empty-row">Активных номинаций нет.</p>{{end}}
-  <p><a href="/jams/{{.JamID}}">Вернуться к джему</a></p>
+  <p><a href="/jams/{{.PublicJamID}}">Вернуться к джему</a></p>
 </main>{{if eq .Stage "voting"}}<script src="/static/js/voting.js" defer></script>{{end}}</body></html>{{end}}

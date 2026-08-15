@@ -32,7 +32,7 @@
   </style>
 </head>
 <body>
-<main id="questionnaire" data-writable="{{if .Writable}}true{{else}}false{{end}}" data-autosave-url="/jams/{{.JamID}}/questionnaire/autosave">
+<main id="questionnaire" data-writable="{{if .Writable}}true{{else}}false{{end}}" data-autosave-url="/jams/{{.PublicJamID}}/questionnaire/autosave">
   <p class="eyebrow">Личное дело / {{.JamTitle}}</p>
   <h1>Анкета участника</h1>
   <p>Текущий статус: <strong id="response-status">{{if eq .ResponseStatus "completed"}}завершена{{else}}черновик{{end}}</strong>.</p>
@@ -67,7 +67,7 @@
   </section>
 
   {{if .Writable}}
-  <form id="questionnaire-complete" method="post" action="/jams/{{.JamID}}/questionnaire/complete">
+  <form id="questionnaire-complete" method="post" action="/jams/{{.PublicJamID}}/questionnaire/complete">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <button type="submit">Завершить анкету</button>
   </form>
@@ -80,7 +80,7 @@
       {{range .Members}}<li>{{.Username}} — <span>{{if eq .Status "completed"}}завершена{{else}}черновик{{end}}</span></li>{{end}}
     </ul>
   </aside>
-  <p><a href="/jams/{{.JamID}}">Вернуться к джему</a></p>
+  <p><a href="/jams/{{.PublicJamID}}">Вернуться к джему</a></p>
 </main>
 </body>
 </html>

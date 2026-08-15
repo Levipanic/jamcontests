@@ -13,7 +13,7 @@
   <main class="dossier">
     <article>
       <header>
-        <p>Командное дело № {{.Team.ID}}</p>
+        <p>Командное дело № {{.Team.PublicID}}</p>
         <h1>{{.Team.Name}}</h1>
       </header>
       {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
@@ -25,8 +25,8 @@
         {{if .Team.ThemePhrase}}<dt>Тема</dt><dd>{{.Team.ThemePhrase}}</dd>{{end}}
         {{if .Team.IsMember}}<dt>Допуск команды</dt><dd>{{if .Team.Eligible}}подтверждён{{else}}не подтверждён{{end}}</dd>{{end}}
       </dl>
-      {{if .Team.CanEditProduct}}<p><a class="action" href="/jams/{{.Team.JamID}}/product">Редактировать продукт команды</a></p>{{end}}
-      {{if .Team.ProductID}}<p><a class="action secondary" href="/products/{{.Team.ProductID}}">Открыть сданный продукт</a></p>{{end}}
+      {{if .Team.CanEditProduct}}<p><a class="action" href="/jams/{{.Team.PublicJamID}}/product">Редактировать продукт команды</a></p>{{end}}
+      {{if .Team.PublicProductID}}<p><a class="action secondary" href="/products/{{.Team.PublicProductID}}">Открыть сданный продукт</a></p>{{end}}
       <h2>Состав</h2>
       <ul>
         {{range .Team.Members}}
@@ -37,14 +37,14 @@
             <span>Редактор продукта: {{if .ProductEditor}}да{{else}}нет{{end}}</span>
           {{end}}
           {{if and $.Team.CanManage (not .Captain)}}
-          <form method="post" action="/teams/{{$.Team.ID}}/captain">
+          <form method="post" action="/teams/{{$.Team.PublicID}}/captain">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="user_id" value="{{.ID}}">
             <button type="submit">Передать капитанство</button>
           </form>
           {{end}}
           {{if $.Team.CanManage}}
-          <form method="post" action="/teams/{{$.Team.ID}}/product-editor">
+          <form method="post" action="/teams/{{$.Team.PublicID}}/product-editor">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="user_id" value="{{.ID}}">
             <button type="submit">{{if .ProductEditor}}Снять полномочия редактора{{else}}Назначить редактором продукта{{end}}</button>
@@ -58,7 +58,7 @@
     {{if .Team.CanManage}}
     <section aria-labelledby="team-edit-heading">
       <h2 id="team-edit-heading">Карточка команды</h2>
-      <form method="post" action="/teams/{{.Team.ID}}/edit" enctype="multipart/form-data">
+      <form method="post" action="/teams/{{.Team.PublicID}}/edit" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <label>Название
           <input name="name" value="{{.Team.Name}}" required minlength="2" maxlength="100">
@@ -80,12 +80,12 @@
       {{else}}
         <p>Действующего приглашения нет.</p>
       {{end}}
-      <form method="post" action="/teams/{{.Team.ID}}/invite">
+      <form method="post" action="/teams/{{.Team.PublicID}}/invite">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit">Выпустить новую ссылку</button>
       </form>
       {{if .Team.InviteLive}}
-      <form method="post" action="/teams/{{.Team.ID}}/invite/revoke">
+      <form method="post" action="/teams/{{.Team.PublicID}}/invite/revoke">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit">Отозвать приглашение</button>
       </form>
@@ -94,12 +94,12 @@
     {{end}}
 
     {{if .Team.CanLeave}}
-    <form method="post" action="/teams/{{.Team.ID}}/leave">
+    <form method="post" action="/teams/{{.Team.PublicID}}/leave">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <button type="submit">Выйти из команды</button>
     </form>
     {{end}}
-    <p><a href="/jams/{{.Team.JamID}}">Вернуться к джему</a></p>
+    <p><a href="/jams/{{.Team.PublicJamID}}">Вернуться к джему</a></p>
   </main>
 </body>
 </html>

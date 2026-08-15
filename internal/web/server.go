@@ -61,6 +61,7 @@ type PageData struct {
 
 type JamView struct {
 	ID               int64
+	PublicID         string
 	Title            string
 	Description      string
 	Rules            string
@@ -419,7 +420,7 @@ func (a *App) recheckHomeDisclosure(c *gin.Context, data *PageData) bool {
 
 func (a *App) activeJam(ctx context.Context) (*JamView, error) {
 	rows, err := a.pool.Query(ctx, `
-		SELECT id, title, description, rules, max_team_size, submission_starts_at, evaluation_starts_at,
+		SELECT id, public_id, title, description, rules, max_team_size, submission_starts_at, evaluation_starts_at,
 		       voting_starts_at, finishes_at, status_override
 		FROM jams WHERE visibility = 'published' ORDER BY finishes_at DESC`)
 	if err != nil {
@@ -431,7 +432,7 @@ func (a *App) activeJam(ctx context.Context) (*JamView, error) {
 		var jam JamView
 		var schedule Schedule
 		var override *string
-		if err := rows.Scan(&jam.ID, &jam.Title, &jam.Description, &jam.Rules, &jam.MaxTeamSize, &schedule.SubmissionStartsAt, &schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override); err != nil {
+		if err := rows.Scan(&jam.ID, &jam.PublicID, &jam.Title, &jam.Description, &jam.Rules, &jam.MaxTeamSize, &schedule.SubmissionStartsAt, &schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override); err != nil {
 			return nil, err
 		}
 		applyPublicJamSchedule(&jam, schedule, override, now)

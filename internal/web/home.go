@@ -12,6 +12,7 @@ import (
 
 type HomeTeamView struct {
 	ID          int64
+	PublicID    string
 	Name        string
 	Description string
 	AvatarPath  string
@@ -25,6 +26,7 @@ type ProfileView struct {
 	Username            string
 	Email               string
 	TeamID              int64
+	TeamPublicID        string
 	TeamName            string
 	TeamRole            string
 	QuestionnaireStatus string
@@ -82,7 +84,7 @@ func (a *App) loadHomeTeams(ctx context.Context, jamID int64, user *User, maxSiz
 		userID = user.ID
 	}
 	rows, err := a.pool.Query(ctx, `
-		SELECT t.id, t.name, t.description, COALESCE(t.avatar_path, ''), count(tm.user_id),
+		SELECT t.id, t.public_id, t.name, t.description, COALESCE(t.avatar_path, ''), count(tm.user_id),
 		       COALESCE(bool_or(tm.user_id = $2), false),
 		       EXISTS (
 		           SELECT 1 FROM team_members eligible_member
@@ -104,7 +106,7 @@ func (a *App) loadHomeTeams(ctx context.Context, jamID int64, user *User, maxSiz
 	var teams []HomeTeamView
 	for rows.Next() {
 		var team HomeTeamView
-		if err := rows.Scan(&team.ID, &team.Name, &team.Description, &team.AvatarPath, &team.MemberCount, &team.IsOwn, &team.Eligible); err != nil {
+		if err := rows.Scan(&team.ID, &team.PublicID, &team.Name, &team.Description, &team.AvatarPath, &team.MemberCount, &team.IsOwn, &team.Eligible); err != nil {
 			return nil, err
 		}
 		team.MaxSize = maxSize
@@ -126,7 +128,7 @@ func (a *App) loadProfile(ctx context.Context, user *User, jam *JamView) (*Profi
 	}
 	var captainID int64
 	err := a.pool.QueryRow(ctx, `
-		SELECT t.id, t.name, t.captain_user_id, COALESCE(r.status, 'draft'),
+		SELECT t.id, t.public_id, t.name, t.captain_user_id, COALESCE(r.status, 'draft'),
 		       EXISTS (
 		           SELECT 1 FROM team_members eligible_member
 		           JOIN questionnaires q2 ON q2.jam_id = eligible_member.jam_id
@@ -141,7 +143,7 @@ func (a *App) loadProfile(ctx context.Context, user *User, jam *JamView) (*Profi
 		LEFT JOIN questionnaire_responses r ON r.questionnaire_id = q.id
 		  AND r.revision=q.current_revision AND r.user_id = tm.user_id
 		WHERE tm.jam_id = $1 AND tm.user_id = $2`, jam.ID, user.ID).Scan(
-		&profile.TeamID, &profile.TeamName, &captainID, &profile.QuestionnaireStatus, &profile.Eligible)
+		&profile.TeamID, &profile.TeamPublicID, &profile.TeamName, &captainID, &profile.QuestionnaireStatus, &profile.Eligible)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return profile, nil
 	}

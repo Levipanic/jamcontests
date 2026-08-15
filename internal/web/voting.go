@@ -12,23 +12,23 @@ import (
 )
 
 type voteRequest struct {
-	ProductID int64 `json:"product_id"`
+	ProductID string `json:"product_id"`
 }
 
 type voteResponse struct {
-	NominationID      int64  `json:"nomination_id,omitempty"`
-	SelectedProductID int64  `json:"selected_product_id,omitempty"`
+	NominationID      string `json:"nomination_id,omitempty"`
+	SelectedProductID string `json:"selected_product_id,omitempty"`
 	Error             string `json:"error,omitempty"`
 }
 
 type voteCount struct {
-	NominationID int64 `json:"nomination_id"`
-	ProductID    int64 `json:"product_id"`
-	Count        int64 `json:"count"`
+	NominationID string `json:"nomination_id"`
+	ProductID    string `json:"product_id"`
+	Count        int64  `json:"count"`
 }
 
 type voteCountsResponse struct {
-	JamID  int64       `json:"jam_id"`
+	JamID  string      `json:"jam_id"`
 	Counts []voteCount `json:"counts"`
 }
 
@@ -42,12 +42,12 @@ func canVote(stage Stage) bool {
 }
 
 func (a *App) vote(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
 		voteUnavailable(c)
 		return
 	}
-	nominationID, ok := teamPositiveID(c.Param("nominationID"))
+	nominationID, ok := a.resolvePublicID(c, "nominationID", "nominations")
 	if !ok {
 		voteUnavailable(c)
 		return
@@ -55,11 +55,16 @@ func (a *App) vote(c *gin.Context) {
 	var request voteRequest
 	decoder := json.NewDecoder(c.Request.Body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || request.ProductID <= 0 {
+	if err := decoder.Decode(&request); err != nil || !validPublicID(request.ProductID) {
 		c.JSON(http.StatusUnprocessableEntity, voteResponse{Error: "Укажите доступный продукт."})
 		return
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusUnprocessableEntity, voteResponse{Error: "Укажите доступный продукт."})
+		return
+	}
+	productID, ok := a.resolvePublicIDValue(c.Request.Context(), "products", request.ProductID)
+	if !ok {
 		c.JSON(http.StatusUnprocessableEntity, voteResponse{Error: "Укажите доступный продукт."})
 		return
 	}
@@ -108,7 +113,7 @@ func (a *App) vote(c *gin.Context) {
 		 AND nomination_product.status='final'
 		WHERE nomination.id=$2 AND nomination.jam_id=$1
 		  AND nomination.withdrawn_at IS NULL AND product.status='final'
-		FOR SHARE OF nomination, product, product_team, nomination_product`, jamID, nominationID, request.ProductID).Scan(&productTeamID)
+		FOR SHARE OF nomination, product, product_team, nomination_product`, jamID, nominationID, productID).Scan(&productTeamID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		voteUnavailable(c)
 		return
@@ -137,17 +142,30 @@ func (a *App) vote(c *gin.Context) {
 	}
 
 	var response voteResponse
+	var selectedNominationID, selectedProductID int64
 	err = tx.QueryRow(ctx, `
 		INSERT INTO nomination_votes (user_id, nomination_id, product_id, jam_id)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id, nomination_id) WHERE invalidated_at IS NULL DO UPDATE SET
 		    product_id=EXCLUDED.product_id,
 		    updated_at=clock_timestamp()
-		RETURNING nomination_id, product_id`, CurrentUser(c).ID, nominationID, request.ProductID, jamID).Scan(&response.NominationID, &response.SelectedProductID)
+		RETURNING nomination_id, product_id`, CurrentUser(c).ID, nominationID, productID, jamID).Scan(&selectedNominationID, &selectedProductID)
 	if err != nil {
 		a.voteFailure(c, "save vote", err)
 		return
 	}
+	nominationPublicID, err := a.publicIDOf(ctx, "nominations", selectedNominationID)
+	if err != nil {
+		a.voteFailure(c, "load vote nomination public id", err)
+		return
+	}
+	productPublicID, err := a.publicIDOf(ctx, "products", selectedProductID)
+	if err != nil {
+		a.voteFailure(c, "load vote product public id", err)
+		return
+	}
+	response.NominationID = nominationPublicID
+	response.SelectedProductID = productPublicID
 
 	var stillVoting bool
 	if err = tx.QueryRow(ctx, `
@@ -171,11 +189,12 @@ func (a *App) vote(c *gin.Context) {
 }
 
 func (a *App) voteCounts(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
 		voteCountsUnavailable(c)
 		return
 	}
+	publicJamID := c.Param("id")
 	ctx := c.Request.Context()
 	open, err := a.voteCountsOpen(ctx, jamID)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && !open {
@@ -189,7 +208,7 @@ func (a *App) voteCounts(c *gin.Context) {
 
 	rows, err := a.pool.Query(ctx, `
 		WITH public_nominations AS (
-			SELECT nomination.id
+			SELECT nomination.id, nomination.public_id
 			FROM nominations nomination
 			WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
 			  AND (nomination.kind='curator' OR EXISTS (
@@ -199,23 +218,23 @@ func (a *App) voteCounts(c *gin.Context) {
 			        AND author_product.status='final'
 			  ))
 		), public_products AS (
-			SELECT product.id FROM products product
+			SELECT product.id, product.public_id FROM products product
 			WHERE product.jam_id=$1 AND product.status='final'
 		)
-		SELECT nomination.id, product.id, count(vote.user_id)::bigint
+		SELECT nomination.public_id, product.public_id, count(vote.user_id)::bigint
 		FROM public_nominations nomination
 		CROSS JOIN public_products product
 		LEFT JOIN nomination_votes vote
 		  ON vote.jam_id=$1 AND vote.nomination_id=nomination.id AND vote.product_id=product.id
 		 AND vote.invalidated_at IS NULL
-		GROUP BY nomination.id, product.id
+		GROUP BY nomination.id, nomination.public_id, product.id, product.public_id
 		ORDER BY nomination.id, product.id`, jamID)
 	if err != nil {
 		a.voteFailure(c, "load vote counts", err)
 		return
 	}
 	defer rows.Close()
-	response := voteCountsResponse{JamID: jamID, Counts: []voteCount{}}
+	response := voteCountsResponse{JamID: publicJamID, Counts: []voteCount{}}
 	for rows.Next() {
 		var count voteCount
 		if err = rows.Scan(&count.NominationID, &count.ProductID, &count.Count); err != nil {

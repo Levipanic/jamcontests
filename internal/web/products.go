@@ -31,9 +31,12 @@ var (
 
 type ProductView struct {
 	ID              int64
+	PublicID        string
 	JamID           int64
+	JamPublicID     string
 	JamTitle        string
 	TeamID          int64
+	TeamPublicID    string
 	TeamName        string
 	Title           string
 	ResultURL       string
@@ -51,6 +54,8 @@ type productPageData struct {
 	CSRFToken    string
 	Error        string
 	JamID        int64
+	PublicJamID  string
+	PublicTeamID string
 	JamTitle     string
 	TeamID       int64
 	TeamName     string
@@ -63,6 +68,7 @@ type productsListPageData struct {
 	User         *User
 	CSRFToken    string
 	JamID        int64
+	PublicJamID  string
 	JamTitle     string
 	Products     []ProductView
 	Stage        Stage
@@ -101,11 +107,11 @@ func (a *App) registerProductRoutes(router *gin.Engine) {
 }
 
 func (a *App) productEditPage(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	publicJamID := c.Param("id")
 	team, err := a.loadEditableProductTeam(c.Request.Context(), jamID, CurrentUser(c).ID)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && !canEditProduct(team, CurrentUser(c).ID) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -118,14 +124,14 @@ func (a *App) productEditPage(c *gin.Context) {
 	var product ProductView
 	var commentary *string
 	err = a.pool.QueryRow(c.Request.Context(), `
-		SELECT product.id, product.title, product.result_url, product.description,
+		SELECT product.id, product.public_id, product.title, product.result_url, product.description,
 		       product.commentary_url, product.notes, product.status,
 		       COALESCE(nomination.title, '')
 		FROM products product
 		LEFT JOIN nominations nomination ON nomination.product_id=product.id
 			AND nomination.kind='team' AND nomination.withdrawn_at IS NULL
 		WHERE product.team_id=$1 AND product.jam_id=$2`, team.ID, jamID).Scan(
-		&product.ID, &product.Title, &product.ResultURL, &product.Description, &commentary,
+		&product.ID, &product.PublicID, &product.Title, &product.ResultURL, &product.Description, &commentary,
 		&product.Notes, &product.Status, &product.NominationTitle)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		a.productFailure(c, "load product draft", err)
@@ -137,21 +143,26 @@ func (a *App) productEditPage(c *gin.Context) {
 	if product.Status == "" {
 		product.Status = "draft"
 	}
-	a.renderProductEdit(c, http.StatusOK, team, product, c.Query("error"))
+	teamPublicID, err := a.publicIDOf(c.Request.Context(), "teams", team.ID)
+	if err != nil {
+		a.productFailure(c, "load product team public id", err)
+		return
+	}
+	a.renderProductEdit(c, http.StatusOK, team, product, publicJamID, teamPublicID, c.Query("error"))
 }
 
 func (a *App) productSave(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	publicJamID := c.Param("id")
 	product, err := productFromForm(c)
 	validationErr := err
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
-		a.productMutationFailure(c, jamID, "begin product save", err)
+		a.productMutationFailure(c, publicJamID, "begin product save", err)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -161,27 +172,27 @@ func (a *App) productSave(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		a.productMutationFailure(c, jamID, "lock product team", err)
+		a.productMutationFailure(c, publicJamID, "lock product team", err)
 		return
 	}
 	if validationErr != nil {
-		productRedirectError(c, jamID, validationErr.Error())
+		productRedirectError(c, publicJamID, validationErr.Error())
 		return
 	}
 	var status string
 	err = tx.QueryRow(ctx, `SELECT status FROM products WHERE team_id=$1 AND jam_id=$2`, team.ID, jamID).Scan(&status)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		a.productMutationFailure(c, jamID, "load product status", err)
+		a.productMutationFailure(c, publicJamID, "load product status", err)
 		return
 	}
 	if status == "final" {
 		if err = validateFinalProductTx(ctx, tx, team, product); err != nil {
-			a.handleFinalProductError(c, jamID, "validate final product edit", err)
+			a.handleFinalProductError(c, publicJamID, "validate final product edit", err)
 			return
 		}
 	}
 	if !canEditProduct(team, CurrentUser(c).ID) {
-		productRedirectError(c, jamID, "Редактирование продукта уже закрыто.")
+		productRedirectError(c, publicJamID, "Редактирование продукта уже закрыто.")
 		return
 	}
 	err = tx.QueryRow(ctx, `
@@ -193,11 +204,11 @@ func (a *App) productSave(c *gin.Context) {
 		RETURNING id`, jamID, team.ID, product.Title, product.ResultURL, product.Description,
 		nullableProductURL(product.CommentaryURL), product.Notes).Scan(&product.ID)
 	if err != nil {
-		a.productMutationFailure(c, jamID, "save product", err)
+		a.productMutationFailure(c, publicJamID, "save product", err)
 		return
 	}
 	if !canEditProduct(team, CurrentUser(c).ID) {
-		productRedirectError(c, jamID, "Редактирование продукта уже закрыто.")
+		productRedirectError(c, publicJamID, "Редактирование продукта уже закрыто.")
 		return
 	}
 	if product.NominationTitle == "" {
@@ -213,23 +224,23 @@ func (a *App) productSave(c *gin.Context) {
 			jamID, product.NominationTitle, team.ID, product.ID)
 	}
 	if err != nil {
-		a.productMutationFailure(c, jamID, "save team nomination", err)
+		a.productMutationFailure(c, publicJamID, "save team nomination", err)
 		return
 	}
 	open, err := teamNominationMutationOpen(ctx, tx, jamID)
 	if err != nil {
-		a.productMutationFailure(c, jamID, "recheck team nomination deadline", err)
+		a.productMutationFailure(c, publicJamID, "recheck team nomination deadline", err)
 		return
 	}
 	if !open {
-		productRedirectError(c, jamID, "Редактирование продукта уже закрыто.")
+		productRedirectError(c, publicJamID, "Редактирование продукта уже закрыто.")
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
-		a.productMutationFailure(c, jamID, "commit product save", err)
+		a.productMutationFailure(c, publicJamID, "commit product save", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/jams/%d/product", jamID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/jams/%s/product", publicJamID))
 }
 
 func teamNominationMutationOpen(ctx context.Context, tx pgx.Tx, jamID int64) (bool, error) {
@@ -244,15 +255,15 @@ func teamNominationMutationOpen(ctx context.Context, tx pgx.Tx, jamID int64) (bo
 }
 
 func (a *App) productFinalize(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	publicJamID := c.Param("id")
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
-		a.productMutationFailure(c, jamID, "begin product finalization", err)
+		a.productMutationFailure(c, publicJamID, "begin product finalization", err)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -262,7 +273,7 @@ func (a *App) productFinalize(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		a.productMutationFailure(c, jamID, "lock finalizing team", err)
+		a.productMutationFailure(c, publicJamID, "lock finalizing team", err)
 		return
 	}
 	var product ProductView
@@ -272,48 +283,57 @@ func (a *App) productFinalize(c *gin.Context) {
 		FROM products WHERE team_id=$1 AND jam_id=$2 FOR UPDATE`, team.ID, jamID).Scan(
 		&product.ID, &product.Title, &product.ResultURL, &product.Description, &commentary, &product.Notes, &product.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
-		productRedirectError(c, jamID, "Сначала сохраните карточку продукта.")
+		productRedirectError(c, publicJamID, "Сначала сохраните карточку продукта.")
 		return
 	}
 	if err != nil {
-		a.productMutationFailure(c, jamID, "load product for finalization", err)
+		a.productMutationFailure(c, publicJamID, "load product for finalization", err)
 		return
 	}
 	if commentary != nil {
 		product.CommentaryURL = *commentary
 	}
 	if err = validateProductFields(product); err != nil {
-		productRedirectError(c, jamID, err.Error())
+		productRedirectError(c, publicJamID, err.Error())
 		return
 	}
 	err = validateFinalProductTx(ctx, tx, team, product)
 	if err != nil {
-		a.handleFinalProductError(c, jamID, "validate product finalization", err)
+		a.handleFinalProductError(c, publicJamID, "validate product finalization", err)
 		return
 	}
 	if !canEditProduct(team, CurrentUser(c).ID) {
-		productRedirectError(c, jamID, "Финальная сдача уже закрыта.")
+		productRedirectError(c, publicJamID, "Финальная сдача уже закрыта.")
 		return
 	}
 	if _, err = tx.Exec(ctx, `
 		UPDATE products SET status='final', finalized_at=COALESCE(finalized_at, now()), updated_at=now()
 		WHERE id=$1`, product.ID); err != nil {
-		a.productMutationFailure(c, jamID, "finalize product", err)
+		a.productMutationFailure(c, publicJamID, "finalize product", err)
+		return
+	}
+	open, err := teamNominationMutationOpen(ctx, tx, jamID)
+	if err != nil {
+		a.productMutationFailure(c, publicJamID, "recheck product finalization deadline", err)
+		return
+	}
+	if !open {
+		productRedirectError(c, publicJamID, "Финальная сдача уже закрыта.")
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
-		a.productMutationFailure(c, jamID, "commit product finalization", err)
+		a.productMutationFailure(c, publicJamID, "commit product finalization", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/jams/%d/product", jamID))
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/jams/%s/product", publicJamID))
 }
 
 func (a *App) productsList(c *gin.Context) {
-	jamID, ok := teamPositiveID(c.Param("id"))
+	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	publicJamID := c.Param("id")
 	jamTitle, stage, err := a.loadPublishedJamStage(c.Request.Context(), jamID)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && !canDiscloseProducts(stage) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -324,8 +344,8 @@ func (a *App) productsList(c *gin.Context) {
 		return
 	}
 	rows, err := a.pool.Query(c.Request.Context(), `
-		SELECT p.id, p.title, p.result_url, p.description, COALESCE(p.commentary_url, ''),
-		       team.id, team.name, theme.phrase,
+		SELECT p.id, p.public_id, p.title, p.result_url, p.description, COALESCE(p.commentary_url, ''),
+		       team.id, team.public_id, team.name, theme.phrase,
 		       COALESCE((SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint FROM product_bumps bump
 		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0)
 		FROM products p
@@ -349,7 +369,8 @@ func (a *App) productsList(c *gin.Context) {
 	for rows.Next() {
 		var product ProductView
 		product.JamID = jamID
-		if err = rows.Scan(&product.ID, &product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamName, &product.Theme, &product.BumpCount); err != nil {
+		product.JamPublicID = publicJamID
+		if err = rows.Scan(&product.ID, &product.PublicID, &product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamPublicID, &product.TeamName, &product.Theme, &product.BumpCount); err != nil {
 			a.productFailure(c, "scan public product", err)
 			return
 		}
@@ -368,21 +389,20 @@ func (a *App) productsList(c *gin.Context) {
 		a.productFailure(c, "recheck public product list", recheckErr)
 		return
 	}
-	c.HTML(http.StatusOK, "products_list.html", productsListPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, JamTitle: jamTitle, Products: products, Stage: stage, BumpsMutable: canMutateBumps(stage)})
+	c.HTML(http.StatusOK, "products_list.html", productsListPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, PublicJamID: publicJamID, JamTitle: jamTitle, Products: products, Stage: stage, BumpsMutable: canMutateBumps(stage)})
 }
 
 func (a *App) productDetail(c *gin.Context) {
-	productID, ok := teamPositiveID(c.Param("id"))
+	productID, ok := a.resolvePublicID(c, "id", "products")
 	if !ok {
-		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	var product ProductView
 	var schedule Schedule
 	var override *string
 	err := a.pool.QueryRow(c.Request.Context(), `
-		SELECT p.id, p.jam_id, jam.title, p.title, p.result_url, p.description,
-		       COALESCE(p.commentary_url, ''), team.id, team.name, theme.phrase,
+		SELECT p.id, p.public_id, p.jam_id, jam.public_id, jam.title, p.title, p.result_url, p.description,
+		       COALESCE(p.commentary_url, ''), team.id, team.public_id, team.name, theme.phrase,
 		       COALESCE((SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint FROM product_bumps bump
 		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0),
 		       jam.submission_starts_at, jam.evaluation_starts_at, jam.voting_starts_at,
@@ -398,8 +418,9 @@ func (a *App) productDetail(c *gin.Context) {
 		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
 		      ELSE clock_timestamp() >= jam.evaluation_starts_at
 		  END`, productID).Scan(
-		&product.ID, &product.JamID, &product.JamTitle, &product.Title, &product.ResultURL,
-		&product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamName, &product.Theme, &product.BumpCount,
+		&product.ID, &product.PublicID, &product.JamID, &product.JamPublicID, &product.JamTitle,
+		&product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL,
+		&product.TeamID, &product.TeamPublicID, &product.TeamName, &product.Theme, &product.BumpCount,
 		&schedule.SubmissionStartsAt, &schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override)
 	if errors.Is(err, pgx.ErrNoRows) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -427,7 +448,7 @@ func (a *App) productDetail(c *gin.Context) {
 		a.productFailure(c, "recheck public product", recheckErr)
 		return
 	}
-	c.HTML(http.StatusOK, "product_detail.html", productPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Product: product, Stage: stage, BumpsMutable: canMutateBumps(stage)})
+	c.HTML(http.StatusOK, "product_detail.html", productPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: product.JamID, PublicJamID: product.JamPublicID, PublicTeamID: product.TeamPublicID, JamTitle: product.JamTitle, TeamID: product.TeamID, TeamName: product.TeamName, Product: product, Stage: stage, BumpsMutable: canMutateBumps(stage)})
 }
 
 func (a *App) adminProductsPage(c *gin.Context) {
@@ -791,25 +812,25 @@ func nullableProductURL(value string) any {
 	return value
 }
 
-func (a *App) renderProductEdit(c *gin.Context, status int, team productTeamRecord, product ProductView, message string) {
-	c.HTML(status, "product_edit.html", productPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message, JamID: team.JamID, TeamID: team.ID, TeamName: team.Name, Product: product})
+func (a *App) renderProductEdit(c *gin.Context, status int, team productTeamRecord, product ProductView, publicJamID, publicTeamID, message string) {
+	c.HTML(status, "product_edit.html", productPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message, JamID: team.JamID, PublicJamID: publicJamID, PublicTeamID: publicTeamID, TeamID: team.ID, TeamName: team.Name, Product: product})
 }
 
-func productRedirectError(c *gin.Context, jamID int64, message string) {
-	teamRedirectError(c, fmt.Sprintf("/jams/%d/product", jamID), message)
+func productRedirectError(c *gin.Context, publicJamID, message string) {
+	teamRedirectError(c, fmt.Sprintf("/jams/%s/product", publicJamID), message)
 }
 
-func (a *App) productMutationFailure(c *gin.Context, jamID int64, operation string, err error) {
+func (a *App) productMutationFailure(c *gin.Context, publicJamID, operation string, err error) {
 	a.logger.Error(operation, "error", err)
-	productRedirectError(c, jamID, "Не удалось сохранить продукт. Попробуйте позже.")
+	productRedirectError(c, publicJamID, "Не удалось сохранить продукт. Попробуйте позже.")
 }
 
-func (a *App) handleFinalProductError(c *gin.Context, jamID int64, operation string, err error) {
+func (a *App) handleFinalProductError(c *gin.Context, publicJamID, operation string, err error) {
 	if errors.Is(err, errProductIncomplete) || errors.Is(err, errProductIneligible) || errors.Is(err, errProductTheme) {
-		productRedirectError(c, jamID, err.Error())
+		productRedirectError(c, publicJamID, err.Error())
 		return
 	}
-	a.productMutationFailure(c, jamID, operation, err)
+	a.productMutationFailure(c, publicJamID, operation, err)
 }
 
 func (a *App) productFailure(c *gin.Context, operation string, err error) {
