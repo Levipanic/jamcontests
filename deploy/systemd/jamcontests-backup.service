@@ -1,0 +1,11 @@
+[Unit]
+Description=Jam Contests database and avatar backup
+After=postgresql.service
+
+# The unit runs as root because it stops and starts jamcontests.service for a
+# consistent snapshot. Secrets live in /etc/jamcontests/backup.env (root, 0600).
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/jamcontests/backup.env
+ExecStart=/opt/jamcontests/scripts/backup.sh
