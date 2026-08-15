@@ -94,7 +94,7 @@ func TestProductTemplatesExecuteAndHideNotes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	product := ProductView{ID: 1, JamID: 2, TeamID: 3, TeamName: "Team", Title: "Result", ResultURL: "https://example.test/result", CommentaryURL: "https://example.test/review", Description: "Description", Notes: "PRIVATE NOTES", Status: "final", Theme: "Theme"}
+	product := ProductView{ID: 1, JamID: 2, TeamID: 3, TeamName: "Team", Title: "Result", ResultURL: "https://example.test/result", CommentaryURL: "https://example.test/review", Description: "Description", Notes: "PRIVATE NOTES", Status: "final", Theme: "Theme", NominationTitle: "PRIVATE NOMINATION RELATION"}
 	tests := []struct {
 		name string
 		data any
@@ -114,6 +114,9 @@ func TestProductTemplatesExecuteAndHideNotes(t *testing.T) {
 			}
 			if tt.name != "product_edit.html" && strings.Contains(output.String(), product.Notes) {
 				t.Fatal("public template disclosed private notes")
+			}
+			if tt.name != "product_edit.html" && strings.Contains(output.String(), product.NominationTitle) {
+				t.Fatal("public product template disclosed nomination relationship")
 			}
 		})
 	}

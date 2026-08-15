@@ -84,6 +84,7 @@ func TestPageTemplatesExecute(t *testing.T) {
 		{"admin_questionnaire.html", jamAdminPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
 		{"admin_themes.html", adminThemesPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
 		{"admin_products.html", adminProductsPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}, Products: []ProductView{{ID: 1, TeamID: 1, TeamName: "Team", Status: "draft"}}}},
+		{"admin_nominations.html", adminNominationsPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
 		{"admin_users.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"admin_teams.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"admin_audit.html", adminControlPageData{User: user, CSRFToken: "token"}},
@@ -94,6 +95,7 @@ func TestPageTemplatesExecute(t *testing.T) {
 		{"product_edit.html", productPageData{User: user, CSRFToken: "token", JamID: 1, TeamID: 1, TeamName: "Team", Product: ProductView{Status: "draft"}}},
 		{"products_list.html", productsListPageData{User: user, CSRFToken: "token", JamID: 1, JamTitle: "Jam"}},
 		{"product_detail.html", productPageData{User: user, CSRFToken: "token", Product: ProductView{ID: 1, JamID: 1, TeamID: 1, Title: "Product"}}},
+		{"nominations_list.html", nominationsPageData{User: user, CSRFToken: "token", JamID: 1, JamTitle: "Jam", Stage: StageVoting}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

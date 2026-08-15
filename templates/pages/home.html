@@ -73,6 +73,9 @@
         {{if or (eq .Jam.Stage "evaluation") (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
         <p><a class="action secondary" href="/jams/{{.Jam.ID}}/products">Продукты джема</a></p>
         {{end}}
+        {{if or (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
+        <p><a class="action secondary" href="/jams/{{.Jam.ID}}/nominations">Номинации джема</a></p>
+        {{end}}
       {{else}}
         <div class="empty-case">
           <p class="eyebrow">Архивная отметка</p>

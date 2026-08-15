@@ -20,6 +20,7 @@ const (
 	productURLMax         = 2048
 	productDescriptionMax = 5000
 	productNotesMax       = 5000
+	nominationTitleMax    = 160
 )
 
 var (
@@ -29,18 +30,19 @@ var (
 )
 
 type ProductView struct {
-	ID            int64
-	JamID         int64
-	JamTitle      string
-	TeamID        int64
-	TeamName      string
-	Title         string
-	ResultURL     string
-	Description   string
-	CommentaryURL string
-	Notes         string
-	Status        string
-	Theme         string
+	ID              int64
+	JamID           int64
+	JamTitle        string
+	TeamID          int64
+	TeamName        string
+	Title           string
+	ResultURL       string
+	Description     string
+	CommentaryURL   string
+	Notes           string
+	Status          string
+	Theme           string
+	NominationTitle string
 }
 
 type productPageData struct {
@@ -111,9 +113,15 @@ func (a *App) productEditPage(c *gin.Context) {
 	var product ProductView
 	var commentary *string
 	err = a.pool.QueryRow(c.Request.Context(), `
-		SELECT id, title, result_url, description, commentary_url, notes, status
-		FROM products WHERE team_id=$1 AND jam_id=$2`, team.ID, jamID).Scan(
-		&product.ID, &product.Title, &product.ResultURL, &product.Description, &commentary, &product.Notes, &product.Status)
+		SELECT product.id, product.title, product.result_url, product.description,
+		       product.commentary_url, product.notes, product.status,
+		       COALESCE(nomination.title, '')
+		FROM products product
+		LEFT JOIN nominations nomination ON nomination.product_id=product.id
+			AND nomination.kind='team' AND nomination.withdrawn_at IS NULL
+		WHERE product.team_id=$1 AND product.jam_id=$2`, team.ID, jamID).Scan(
+		&product.ID, &product.Title, &product.ResultURL, &product.Description, &commentary,
+		&product.Notes, &product.Status, &product.NominationTitle)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		a.productFailure(c, "load product draft", err)
 		return
@@ -171,15 +179,45 @@ func (a *App) productSave(c *gin.Context) {
 		productRedirectError(c, jamID, "Редактирование продукта уже закрыто.")
 		return
 	}
-	_, err = tx.Exec(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO products (jam_id, team_id, title, result_url, description, commentary_url, notes)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (team_id, jam_id) DO UPDATE SET
 			title=EXCLUDED.title, result_url=EXCLUDED.result_url, description=EXCLUDED.description,
-			commentary_url=EXCLUDED.commentary_url, notes=EXCLUDED.notes, updated_at=now()`,
-		jamID, team.ID, product.Title, product.ResultURL, product.Description, nullableProductURL(product.CommentaryURL), product.Notes)
+			commentary_url=EXCLUDED.commentary_url, notes=EXCLUDED.notes, updated_at=now()
+		RETURNING id`, jamID, team.ID, product.Title, product.ResultURL, product.Description,
+		nullableProductURL(product.CommentaryURL), product.Notes).Scan(&product.ID)
 	if err != nil {
 		a.productMutationFailure(c, jamID, "save product", err)
+		return
+	}
+	if !canEditProduct(team, CurrentUser(c).ID) {
+		productRedirectError(c, jamID, "Редактирование продукта уже закрыто.")
+		return
+	}
+	if product.NominationTitle == "" {
+		_, err = tx.Exec(ctx, `
+			UPDATE nominations SET withdrawn_at=now(), updated_at=now()
+			WHERE jam_id=$1 AND product_id=$2 AND kind='team' AND withdrawn_at IS NULL`, jamID, product.ID)
+	} else {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO nominations (jam_id, kind, title, author_team_id, product_id)
+			VALUES ($1, 'team', $2, $3, $4)
+			ON CONFLICT (jam_id, product_id) WHERE kind='team' DO UPDATE SET
+				title=EXCLUDED.title, withdrawn_at=NULL, updated_at=now()`,
+			jamID, product.NominationTitle, team.ID, product.ID)
+	}
+	if err != nil {
+		a.productMutationFailure(c, jamID, "save team nomination", err)
+		return
+	}
+	open, err := teamNominationMutationOpen(ctx, tx, jamID)
+	if err != nil {
+		a.productMutationFailure(c, jamID, "recheck team nomination deadline", err)
+		return
+	}
+	if !open {
+		productRedirectError(c, jamID, "Редактирование продукта уже закрыто.")
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -187,6 +225,17 @@ func (a *App) productSave(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/jams/%d/product", jamID))
+}
+
+func teamNominationMutationOpen(ctx context.Context, tx pgx.Tx, jamID int64) (bool, error) {
+	var open bool
+	err := tx.QueryRow(ctx, `
+		SELECT visibility='published' AND (
+			status_override='submission'
+			OR (status_override IS NULL AND clock_timestamp() >= submission_starts_at AND clock_timestamp() < evaluation_starts_at)
+		)
+		FROM jams WHERE id=$1`, jamID).Scan(&open)
+	return open, err
 }
 
 func (a *App) productFinalize(c *gin.Context) {
@@ -599,16 +648,20 @@ func validateFinalProductTx(ctx context.Context, tx pgx.Tx, team productTeamReco
 
 func productFromForm(c *gin.Context) (ProductView, error) {
 	product := ProductView{
-		Title:         strings.TrimSpace(c.PostForm("title")),
-		ResultURL:     strings.TrimSpace(c.PostForm("result_url")),
-		Description:   strings.TrimSpace(c.PostForm("description")),
-		CommentaryURL: strings.TrimSpace(c.PostForm("commentary_url")),
-		Notes:         strings.TrimSpace(c.PostForm("notes")),
+		Title:           strings.TrimSpace(c.PostForm("title")),
+		ResultURL:       strings.TrimSpace(c.PostForm("result_url")),
+		Description:     strings.TrimSpace(c.PostForm("description")),
+		CommentaryURL:   strings.TrimSpace(c.PostForm("commentary_url")),
+		Notes:           strings.TrimSpace(c.PostForm("notes")),
+		NominationTitle: strings.TrimSpace(c.PostForm("nomination_title")),
 	}
 	return product, validateProductFields(product)
 }
 
 func validateProductFields(product ProductView) error {
+	if err := validateNominationTitle(product.NominationTitle, true); err != nil {
+		return err
+	}
 	if utf8.RuneCountInString(product.Title) > productTitleMax || productHasUnsafeControl(product.Title, false) {
 		return errors.New("Название должно содержать не более 200 символов без управляющих знаков.")
 	}
@@ -627,6 +680,14 @@ func validateProductFields(product ProductView) error {
 		if err := validateExternalURL(product.CommentaryURL); err != nil {
 			return errors.New("Ссылка на комментарий должна быть абсолютным HTTP(S) URL без учётных данных и управляющих знаков.")
 		}
+	}
+	return nil
+}
+
+func validateNominationTitle(value string, optional bool) error {
+	if value != strings.TrimSpace(value) || (!optional && value == "") ||
+		utf8.RuneCountInString(value) > nominationTitleMax || productHasUnsafeControl(value, false) {
+		return errors.New("Название номинации должно содержать от 1 до 160 символов без управляющих знаков.")
 	}
 	return nil
 }

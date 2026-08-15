@@ -1,0 +1,14 @@
+{{define "nominations_list.html"}}<!doctype html>
+<html lang="ru"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
+  <title>Номинации · {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css">
+</head><body><main class="dossier">
+  <header class="case-heading"><p class="eyebrow">Опубликованное дело / джем № {{.JamID}}</p><h1>Номинации · {{.JamTitle}}</h1></header>
+  {{if .Nominations}}
+  <section class="folder-scroll" aria-label="Номинации джема">
+    {{range .Nominations}}<article class="team-folder"><span class="folder-tab">Номинация</span><span class="folder-body"><span class="folder-copy"><strong>{{.Title}}</strong>{{if eq .Kind "curator"}}<small>Кураторская номинация</small>{{end}}{{if and (eq $.Stage "finished") (eq .Kind "team")}}<span>Автор: {{.AuthorTeamName}}</span>{{end}}</span></span></article>{{end}}
+  </section>
+  {{else}}<p class="empty-row">Активных номинаций нет.</p>{{end}}
+  <p><a href="/">Вернуться к делу</a></p>
+</main></body></html>{{end}}

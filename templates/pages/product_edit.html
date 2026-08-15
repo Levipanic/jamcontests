@@ -15,6 +15,7 @@
     <label>Описание<textarea name="description" maxlength="5000" rows="10">{{.Product.Description}}</textarea></label>
     <label>Внешняя ссылка на комментарий или разбор<input name="commentary_url" type="url" value="{{.Product.CommentaryURL}}" maxlength="2048" inputmode="url"></label>
     <label>Внутренние заметки команды<textarea name="notes" maxlength="5000" rows="7">{{.Product.Notes}}</textarea></label>
+    <label>Командная номинация, необязательно<input name="nomination_title" value="{{.Product.NominationTitle}}" maxlength="160"><small>Пустое поле отзывает номинацию. До голосования она видна только вашей команде и администраторам.</small></label>
     <button type="submit">Сохранить {{if eq .Product.Status "final"}}изменения{{else}}черновик{{end}}</button>
   </form></section>
   {{if ne .Product.Status "final"}}<section><h2>Финальная сдача</h2><p>Нужны название, ссылка на результат, активная тема и допуск команды.</p>

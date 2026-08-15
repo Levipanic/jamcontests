@@ -29,7 +29,7 @@
 </form>
 </main>
 {{if .Jam}}
-<section><h2>Материалы</h2><p><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Открыть конструктор вопросов</a></p><p><a href="/admin/jams/{{.Jam.ID}}/themes">Управлять темами</a></p><p><a href="/admin/jams/{{.Jam.ID}}/products">Модерировать продукты</a></p></section>
+<section><h2>Материалы</h2><p><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Открыть конструктор вопросов</a></p><p><a href="/admin/jams/{{.Jam.ID}}/themes">Управлять темами</a></p><p><a href="/admin/jams/{{.Jam.ID}}/products">Модерировать продукты</a></p><p><a href="/admin/jams/{{.Jam.ID}}/nominations">Управлять номинациями</a></p></section>
 <section class="danger"><h2>Видимость и стадия</h2><p>Все действия требуют отдельного обоснования. Hard delete отсутствует.</p>
 {{if eq .Jam.Visibility "draft"}}
 <form method="post" action="/admin/jams/{{.Jam.ID}}/publish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Опубликовать</button></form>
