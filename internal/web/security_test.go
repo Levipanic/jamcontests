@@ -101,6 +101,50 @@ func TestAuthIdentityLimitAppliesAcrossIPs(t *testing.T) {
 	}
 }
 
+func TestAuthRateLimitUsesClientIPOnlyFromTrustedProxies(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		trusted     []string
+		blockSecond bool
+	}{
+		{"untrusted proxy ignored", nil, true},
+		{"trusted proxy honored", []string{"10.0.0.0/8"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := &App{authLimit: newAuthAttemptLimiter()}
+			router := gin.New()
+			if err := router.SetTrustedProxies(test.trusted); err != nil {
+				t.Fatal(err)
+			}
+			router.POST("/probe", func(c *gin.Context) {
+				c.String(200, boolString(app.allowAuthAttempt(c, "register", "", 1, time.Minute)))
+			})
+
+			attempt := func(remote, xff string) bool {
+				request := httptest.NewRequest("POST", "/probe", nil)
+				request.RemoteAddr = remote
+				request.Header.Set("X-Forwarded-For", xff)
+				recorder := httptest.NewRecorder()
+				router.ServeHTTP(recorder, request)
+				return recorder.Body.String() == "true"
+			}
+			if !attempt("10.0.0.1:1234", "203.0.113.9") {
+				t.Fatal("first attempt was rejected")
+			}
+			if got := attempt("10.0.0.1:1234", "203.0.113.10"); got == test.blockSecond {
+				t.Fatalf("second attempt allowed=%v, want blockSecond=%v", got, test.blockSecond)
+			}
+		})
+	}
+}
+
+func boolString(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
+}
+
 func TestTemplatesParseAndRenderHome(t *testing.T) {
 	tmpl, err := loadTemplates("../../templates")
 	if err != nil {

@@ -3,8 +3,6 @@ package web
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,7 +54,7 @@ func (l *authAttemptLimiter) allow(key string, maximum int, window time.Duration
 }
 
 func (a *App) allowAuthAttempt(c *gin.Context, action, username string, maximum int, window time.Duration) bool {
-	ipKey := action + "|ip|" + requestIP(c.Request)
+	ipKey := action + "|ip|" + c.ClientIP()
 	ipMaximum := maximum
 	if username != "" {
 		ipMaximum = maximum * 3
@@ -91,12 +89,4 @@ func (a *App) acquirePasswordWork() bool {
 
 func (a *App) releasePasswordWork() {
 	<-a.passwordWork
-}
-
-func requestIP(request *http.Request) string {
-	host, _, err := net.SplitHostPort(request.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return request.RemoteAddr
 }

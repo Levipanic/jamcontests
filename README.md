@@ -62,4 +62,6 @@ Remove-Item Env:TEST_DATABASE_URL
 
 Загруженные аватары сохраняются в `storage/avatars` и не попадают в Git. В production этот каталог и PostgreSQL должны входить в резервное копирование.
 
-В production задайте отдельный `MIGRATION_DATABASE_URL` для роли-владельца схемы. Runtime-роль из `DATABASE_URL` должна иметь только необходимые приложению права; для `admin_audit_log` ей нужны `SELECT` и `INSERT`, но не `UPDATE`, `DELETE`, `TRUNCATE` или владение таблицей. Миграция дополнительно блокирует эти изменения триггерами.
+В production задайте отдельный `MIGRATION_DATABASE_URL` для роли-владельца схемы; без него команда `migrate` не запускается, а `serve` эту переменную не читает. Runtime-роль из `DATABASE_URL` должна иметь только необходимые приложению права; для `admin_audit_log` ей нужны `SELECT` и `INSERT`, но не `UPDATE`, `DELETE`, `TRUNCATE` или владение таблицей. Миграция `009_runtime_privileges.sql` выдаёт права runtime-роли, если она существует, а миграции дополнительно блокируют изменения аудита триггерами. Инструкция по развёртыванию — в `docs/production.md`, шаблоны ролей и systemd-юнит — в `deploy/`.
+
+`GET /health` отдаёт `200` только когда PostgreSQL отвечает и схема полностью промигрирована; см. `docs/production.md`.

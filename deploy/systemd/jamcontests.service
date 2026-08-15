@@ -1,0 +1,38 @@
+[Unit]
+Description=Jam Contests web application
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jamcontests
+Group=jamcontests
+WorkingDirectory=/opt/jamcontests
+EnvironmentFile=/etc/jamcontests/jamcontests.env
+ExecStart=/opt/jamcontests/bin/jamcontests serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# The systemd kill path is never used; graceful shutdown is handled by the app.
+SuccessExitStatus=0
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+# Avatar uploads and static assets stay on disk, outside executable paths.
+ReadWritePaths=/opt/jamcontests/storage/avatars /opt/jamcontests/storage
+ReadOnlyPaths=/opt/jamcontests/migrations /opt/jamcontests/templates /opt/jamcontests/static /opt/jamcontests/bin
+
+[Install]
+WantedBy=multi-user.target

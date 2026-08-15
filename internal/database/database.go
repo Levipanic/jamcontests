@@ -115,3 +115,41 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 	}
 	return nil
 }
+
+// CheckUpToDate reports whether every migration file has been applied with an
+// unchanged checksum. It is used by the readiness probe; the app must not serve
+// traffic against a schema that is not fully migrated.
+func CheckUpToDate(ctx context.Context, pool *pgxpool.Pool, dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read migrations: %w", err)
+	}
+	var names []string
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		var appliedChecksum []byte
+		err := pool.QueryRow(ctx, `SELECT checksum FROM schema_migrations WHERE name = $1`, name).Scan(&appliedChecksum)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("migration %s not applied", name)
+		}
+		if err != nil {
+			return fmt.Errorf("check migration %s: %w", name, err)
+		}
+		body, err := fs.ReadFile(os.DirFS(dir), filepath.ToSlash(name))
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", name, err)
+		}
+		canonicalBody := bytes.ReplaceAll(body, []byte("\r\n"), []byte("\n"))
+		checksum := sha256.Sum256(canonicalBody)
+		crlfChecksum := sha256.Sum256(bytes.ReplaceAll(canonicalBody, []byte("\n"), []byte("\r\n")))
+		if !bytes.Equal(appliedChecksum, checksum[:]) && !bytes.Equal(appliedChecksum, crlfChecksum[:]) {
+			return fmt.Errorf("migration %s changed after it was applied", name)
+		}
+	}
+	return nil
+}

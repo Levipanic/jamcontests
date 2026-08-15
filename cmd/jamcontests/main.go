@@ -5,7 +5,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,11 +29,28 @@ func main() {
 	}
 }
 
+func newLogger(cfg config.Config) *slog.Logger {
+	return slog.New(logHandler(cfg, os.Stdout))
+}
+
+func logHandler(cfg config.Config, out io.Writer) slog.Handler {
+	if cfg.Production() {
+		return slog.NewJSONHandler(out, &slog.HandlerOptions{Level: cfg.LogLevel})
+	}
+	return slog.NewTextHandler(out, &slog.HandlerOptions{Level: cfg.LogLevel})
+}
+
 func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	if len(args) == 0 {
 		return errors.New("использование: jamcontests <serve|migrate|create-admin>")
 	}
-	cfg, err := config.Load()
+	var cfg config.Config
+	var err error
+	if args[0] == "migrate" {
+		cfg, err = config.LoadMigrate()
+	} else {
+		cfg, err = config.LoadServe()
+	}
 	if err != nil {
 		return fmt.Errorf("конфигурация: %w", err)
 	}
@@ -91,13 +110,10 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 }
 
 func serve(parent context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) error {
-	server := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           web.New(cfg, pool, logger),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
+	server := buildServer(cfg, pool, logger)
+	listener, err := net.Listen("tcp", cfg.HTTPAddr)
+	if err != nil {
+		return fmt.Errorf("слушать %s: %w", cfg.HTTPAddr, err)
 	}
 
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
@@ -105,7 +121,7 @@ func serve(parent context.Context, cfg config.Config, pool *pgxpool.Pool, logger
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("HTTP server starting", "addr", cfg.HTTPAddr)
-		errCh <- server.ListenAndServe()
+		errCh <- server.Serve(listener)
 	}()
 
 	select {
@@ -118,6 +134,9 @@ func serve(parent context.Context, cfg config.Config, pool *pgxpool.Pool, logger
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Error("graceful shutdown timed out; forcing close", "error", err)
+			_ = server.Close()
+			<-errCh
 			return fmt.Errorf("остановить HTTP-сервер: %w", err)
 		}
 		err := <-errCh
@@ -127,4 +146,18 @@ func serve(parent context.Context, cfg config.Config, pool *pgxpool.Pool, logger
 		logger.Info("HTTP server stopped")
 		return nil
 	}
+}
+
+func buildServer(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *http.Server {
+	server := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           web.New(cfg, pool, logger),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+	server.ErrorLog = slog.NewLogLogger(logger.Handler(), slog.LevelError)
+	return server
 }

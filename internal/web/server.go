@@ -16,6 +16,7 @@ import (
 
 	"github.com/Levipanic/jamcontests/internal/auth"
 	"github.com/Levipanic/jamcontests/internal/config"
+	"github.com/Levipanic/jamcontests/internal/database"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -94,7 +95,7 @@ func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *gin.Engine
 	}
 	router := gin.New()
 	router.HandleMethodNotAllowed = true
-	if err := router.SetTrustedProxies(nil); err != nil {
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		panic(err)
 	}
 	router.MaxMultipartMemory = cfg.MaxAvatarBytes
@@ -366,6 +367,11 @@ func (a *App) health(c *gin.Context) {
 	defer cancel()
 	if err := a.pool.Ping(ctx); err != nil {
 		a.logger.Warn("health database check failed")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+		return
+	}
+	if err := database.CheckUpToDate(ctx, a.pool, a.config.MigrationsDir); err != nil {
+		a.logger.Warn("health schema check failed", "error", err)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
 		return
 	}

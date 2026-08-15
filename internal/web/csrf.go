@@ -19,6 +19,11 @@ const (
 
 func (a *App) csrf() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// The readiness probe must not receive cookies or session work.
+		if c.Request.URL.Path == "/health" {
+			c.Next()
+			return
+		}
 		cookieName := a.csrfCookieName()
 		binding := a.csrfSessionBinding(c)
 		token, err := c.Cookie(cookieName)
