@@ -19,15 +19,17 @@ const (
 
 func (a *App) csrf() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token, err := c.Cookie(csrfCookieName)
-		if err != nil || !a.validCSRFSignature(token) {
-			token, err = a.newCSRFToken()
+		cookieName := a.csrfCookieName()
+		binding := a.csrfSessionBinding(c)
+		token, err := c.Cookie(cookieName)
+		if err != nil || !a.validCSRFSignature(token, binding) {
+			token, err = a.newCSRFToken(binding)
 			if err != nil {
 				a.logger.Error("generate CSRF token")
 				c.AbortWithStatus(http.StatusInternalServerError)
 				return
 			}
-			http.SetCookie(c.Writer, &http.Cookie{Name: csrfCookieName, Value: token, Path: "/", HttpOnly: true, Secure: a.config.Production(), SameSite: http.SameSiteLaxMode})
+			http.SetCookie(c.Writer, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true, Secure: a.config.Production(), SameSite: http.SameSiteLaxMode})
 		}
 		c.Set(csrfContextKey, token)
 
@@ -39,20 +41,15 @@ func (a *App) csrf() gin.HandlerFunc {
 		if supplied == "" {
 			supplied = c.PostForm("csrf_token")
 		}
-		if !a.validCSRFSignature(supplied) || subtle.ConstantTimeCompare([]byte(token), []byte(supplied)) != 1 {
-			if strings.Contains(c.GetHeader("Accept"), "application/json") || c.ContentType() == "application/json" {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Недействительный CSRF-токен."})
-			} else {
-				c.Abort()
-				c.String(http.StatusForbidden, "Недействительный CSRF-токен.")
-			}
+		if !a.validCSRFSignature(supplied, binding) || subtle.ConstantTimeCompare([]byte(token), []byte(supplied)) != 1 {
+			a.writeError(c, http.StatusForbidden, "Недействительный CSRF-токен.")
 			return
 		}
 		c.Next()
 	}
 }
 
-func (a *App) newCSRFToken() (string, error) {
+func (a *App) newCSRFToken(binding ...string) (string, error) {
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
@@ -60,10 +57,12 @@ func (a *App) newCSRFToken() (string, error) {
 	encoded := base64.RawURLEncoding.EncodeToString(nonce)
 	mac := hmac.New(sha256.New, a.config.CSRFSecret)
 	mac.Write([]byte(encoded))
+	mac.Write([]byte{0})
+	mac.Write([]byte(firstString(binding)))
 	return encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
-func (a *App) validCSRFSignature(token string) bool {
+func (a *App) validCSRFSignature(token string, binding ...string) bool {
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 {
 		return false
@@ -78,7 +77,32 @@ func (a *App) validCSRFSignature(token string) bool {
 	}
 	mac := hmac.New(sha256.New, a.config.CSRFSecret)
 	mac.Write([]byte(parts[0]))
+	mac.Write([]byte{0})
+	mac.Write([]byte(firstString(binding)))
 	return hmac.Equal(signature, mac.Sum(nil))
+}
+
+func (a *App) csrfSessionBinding(c *gin.Context) string {
+	raw, err := c.Cookie(a.config.SessionCookie)
+	if err != nil || raw == "" {
+		return ""
+	}
+	hash := sha256.Sum256([]byte(raw))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
+func (a *App) csrfCookieName() string {
+	if a.config.Production() {
+		return "__Host-jamcontests_csrf"
+	}
+	return csrfCookieName
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func csrfToken(c *gin.Context) string {

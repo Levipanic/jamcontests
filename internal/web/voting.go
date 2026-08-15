@@ -71,7 +71,6 @@ func (a *App) vote(c *gin.Context) {
 		return
 	}
 	defer tx.Rollback(ctx)
-
 	var stageValue string
 	err = tx.QueryRow(ctx, `
 		SELECT CASE
@@ -116,6 +115,10 @@ func (a *App) vote(c *gin.Context) {
 	}
 	if err != nil {
 		a.voteFailure(c, "validate vote entities", err)
+		return
+	}
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(format('vote-membership:%s:%s', $1::bigint, $2::bigint), 0))`, jamID, CurrentUser(c).ID); err != nil {
+		a.voteFailure(c, "lock vote membership", err)
 		return
 	}
 

@@ -144,6 +144,17 @@ func (a *App) adminMutateVote(c *gin.Context, invalidate bool) {
 	}
 	defer tx.Rollback(ctx)
 	var userID, nominationID, productID int64
+	if err = tx.QueryRow(ctx, `SELECT user_id FROM nomination_votes WHERE id=$1 AND jam_id=$2`, recordID, jamID).Scan(&userID); errors.Is(err, pgx.ErrNoRows) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	} else if err != nil {
+		a.adminInterventionFailure(c, "load vote intervention user", err)
+		return
+	}
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(format('vote-membership:%s:%s', $1::bigint, $2::bigint), 0))`, jamID, userID); err != nil {
+		a.adminInterventionFailure(c, "lock vote membership", err)
+		return
+	}
 	var invalidatedAt *time.Time
 	var invalidatedBy *int64
 	var beforeReason *string
@@ -159,6 +170,29 @@ func (a *App) adminMutateVote(c *gin.Context, invalidate bool) {
 	if invalidate == (invalidatedAt != nil) {
 		a.adminInterventionRedirect(c, jamID, "votes", "Голос уже имеет выбранное состояние.")
 		return
+	}
+	if !invalidate {
+		var restorable bool
+		if err = tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM nominations nomination
+				JOIN products product ON product.id=$3 AND product.jam_id=nomination.jam_id
+				JOIN products nomination_product
+				  ON nomination_product.id=CASE WHEN nomination.kind='team' THEN nomination.product_id ELSE product.id END
+				 AND nomination_product.jam_id=nomination.jam_id AND nomination_product.status='final'
+				WHERE nomination.id=$2 AND nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
+				  AND product.status='final' AND NOT EXISTS (
+					SELECT 1 FROM team_members member
+					WHERE member.jam_id=$1 AND member.user_id=$4 AND member.team_id=product.team_id
+				  )
+			)`, jamID, nominationID, productID, userID).Scan(&restorable); err != nil {
+			a.adminInterventionFailure(c, "validate vote restoration", err)
+			return
+		}
+		if !restorable {
+			a.adminInterventionRedirect(c, jamID, "votes", "Голос нельзя восстановить при текущем продукте, номинации или составе команды.")
+			return
+		}
 	}
 	before := map[string]any{"id": recordID, "user_id": userID, "nomination_id": nominationID, "product_id": productID, "invalidated_at": invalidatedAt, "invalidated_by": invalidatedBy, "invalidation_reason": beforeReason}
 	if invalidate {
@@ -273,5 +307,5 @@ func (a *App) adminInterventionRedirect(c *gin.Context, jamID int64, domain, mes
 }
 func (a *App) adminInterventionFailure(c *gin.Context, operation string, err error) {
 	a.logger.Error(operation, "error", err)
-	c.String(http.StatusInternalServerError, "Не удалось выполнить административное вмешательство.")
+	a.writeError(c, http.StatusInternalServerError, "Не удалось выполнить административное вмешательство.")
 }

@@ -2,12 +2,14 @@ package web
 
 import (
 	"bytes"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Levipanic/jamcontests/internal/config"
+	"github.com/gin-gonic/gin"
 )
 
 func TestSafeNext(t *testing.T) {
@@ -42,6 +44,13 @@ func TestCSRFTokenSignature(t *testing.T) {
 	if app.validCSRFSignature(token + "x") {
 		t.Fatal("tampered token validated")
 	}
+	bound, err := app.newCSRFToken("session-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !app.validCSRFSignature(bound, "session-a") || app.validCSRFSignature(bound, "session-b") || app.validCSRFSignature(bound) {
+		t.Fatal("session-bound CSRF token accepted with the wrong binding")
+	}
 }
 
 func TestAvatarLookupRequiresPublishedJamForNonAdmin(t *testing.T) {
@@ -74,6 +83,20 @@ func TestCreateAdminSerializesBootstrapAndRevokesSessions(t *testing.T) {
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("admin bootstrap is missing %q", required)
+		}
+	}
+}
+
+func TestAuthIdentityLimitAppliesAcrossIPs(t *testing.T) {
+	app := &App{authLimit: newAuthAttemptLimiter()}
+	for index, remote := range []string{"192.0.2.1:1000", "198.51.100.2:2000"} {
+		request := httptest.NewRequest("POST", "/login", nil)
+		request.RemoteAddr = remote
+		context, _ := gin.CreateTestContext(httptest.NewRecorder())
+		context.Request = request
+		allowed := app.allowAuthAttempt(context, "login", "SameUser", 1, time.Minute)
+		if allowed != (index == 0) {
+			t.Fatalf("attempt %d from %s allowed=%v", index+1, remote, allowed)
 		}
 	}
 }
@@ -133,12 +156,14 @@ func TestPageTemplatesExecute(t *testing.T) {
 		{"team_new.html", teamPageView{User: user, CSRFToken: "token", JamID: 1}},
 		{"team_detail.html", teamPageView{User: user, CSRFToken: "token", Team: teamDetailView{ID: 1, Name: "Team"}}},
 		{"team_invite.html", teamInviteView{User: user, CSRFToken: "token", TeamID: 1, TeamName: "Team"}},
+		{"team_invite_issued.html", teamInviteView{User: user, CSRFToken: "token", Token: "invite-token", TeamID: 1}},
 		{"questionnaire.html", questionnairePageData{User: user, CSRFToken: "token", JamID: 1, JamTitle: "Jam"}},
 		{"product_edit.html", productPageData{User: user, CSRFToken: "token", JamID: 1, TeamID: 1, TeamName: "Team", Product: ProductView{Status: "draft"}}},
 		{"products_list.html", productsListPageData{User: user, CSRFToken: "token", JamID: 1, JamTitle: "Jam"}},
 		{"product_detail.html", productPageData{User: user, CSRFToken: "token", Product: ProductView{ID: 1, JamID: 1, TeamID: 1, Title: "Product"}}},
 		{"nominations_list.html", nominationsPageData{User: user, CSRFToken: "token", JamID: 1, JamTitle: "Jam", Stage: StageVoting}},
 		{"archive.html", archivePageData{User: user, CSRFToken: "token", Jams: []JamView{{ID: 1, Title: "Jam", Stage: StageFinished, Dates: []JamDateView{{}, {}, {}, {Moscow: "01.01.2026 15:00 МСК"}}}}}},
+		{"error.html", errorPageData{Status: 404, Message: "Недоступно", RequestID: "request-id"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

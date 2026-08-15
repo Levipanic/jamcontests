@@ -50,6 +50,17 @@ func TestAdminVoteAndBumpInterventionsAffectAuthoritativeCounts(t *testing.T) {
 		t.Fatalf("admin votes status=%d", recorder.Code)
 	}
 	csrfCookie := responseCookie(t, recorder.Result(), csrfCookieName)
+	var productBCaptainID, selfVoteID int64
+	if err := pool.QueryRow(ctx, `SELECT team.captain_user_id FROM products product JOIN teams team ON team.id=product.team_id WHERE product.id=$1`, fixture.productBID).Scan(&productBCaptainID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO nomination_votes (user_id,nomination_id,product_id,jam_id,invalidated_at,invalidated_by,invalidation_reason) VALUES ($1,$2,$3,$4,now(),$5,'test invalidation') RETURNING id`, productBCaptainID, fixture.nominationID, fixture.productBID, fixture.jamID, adminID).Scan(&selfVoteID); err != nil {
+		t.Fatal(err)
+	}
+	selfRestore := performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/votes/"+formatID(selfVoteID)+"/restore", "restore")
+	if !strings.Contains(selfRestore.Header().Get("Location"), "error=") {
+		t.Fatal("restoring a self-vote did not report a conflict")
+	}
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/votes/"+formatID(voteID)+"/invalidate", "invalidate")
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/bumps/"+formatID(bumpID)+"/invalidate", "invalidate")
 
@@ -74,7 +85,12 @@ func TestAdminVoteAndBumpInterventionsAffectAuthoritativeCounts(t *testing.T) {
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/bumps/"+formatID(bumpID)+"/invalidate", "invalidate")
 
 	voterSession := insertQuestionnaireReportSession(t, ctx, pool, "test_session", fixture.voterID, 22)
-	newVote := performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productCID, csrfCookie, voterSession)
+	voterCSRFRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil)
+	voterCSRFRequest.AddCookie(voterSession)
+	voterCSRFResponse := httptest.NewRecorder()
+	router.ServeHTTP(voterCSRFResponse, voterCSRFRequest)
+	voterCSRF := responseCookie(t, voterCSRFResponse.Result(), csrfCookieName)
+	newVote := performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productCID, voterCSRF, voterSession)
 	if newVote.Code != http.StatusOK {
 		t.Fatalf("new vote after invalidation status=%d body=%s", newVote.Code, newVote.Body.String())
 	}

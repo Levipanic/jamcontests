@@ -43,7 +43,6 @@ type teamDetailView struct {
 	MemberCount    int
 	Members        []teamMemberView
 	Eligible       bool
-	InvitePath     string
 	InviteLive     bool
 	IsMember       bool
 	IsCaptain      bool
@@ -302,16 +301,6 @@ func (a *App) teamDetail(c *gin.Context) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-		if raw := c.Query("invite"); raw != "" {
-			c.Header("Cache-Control", "no-store")
-			hash := teamInviteTokenHash(raw)
-			if hash != nil {
-				var current bool
-				if scanErr := a.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM team_invites WHERE team_id = $1 AND token_hash = $2 AND revoked_at IS NULL)`, teamID, hash).Scan(&current); scanErr == nil && current {
-					view.InvitePath = "/invites/" + raw
-				}
-			}
-		}
 	}
 
 	rows, err := a.pool.Query(ctx, `
@@ -346,6 +335,16 @@ func (a *App) teamDetail(c *gin.Context) {
 	}
 	if err := rows.Err(); err != nil {
 		a.logger.Error("iterate team members", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	_, currentStage, recheckErr := a.loadPublishedJamStage(ctx, view.JamID)
+	if errors.Is(recheckErr, pgx.ErrNoRows) || recheckErr == nil && currentStage != stage {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if recheckErr != nil {
+		a.logger.Error("recheck team disclosure", "error", recheckErr)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -466,7 +465,7 @@ func (a *App) teamInviteIssue(c *gin.Context) {
 		teamRedirectError(c, fmt.Sprintf("/teams/%d", teamID), "Не удалось выпустить приглашение. Попробуйте позже.")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/teams/%d?invite=%s", teamID, url.QueryEscape(token)))
+	c.HTML(http.StatusOK, "team_invite_issued.html", teamInviteView{User: CurrentUser(c), CSRFToken: csrfToken(c), Token: token, TeamID: teamID})
 }
 
 func (a *App) teamInviteRevoke(c *gin.Context) {

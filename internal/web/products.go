@@ -359,6 +359,15 @@ func (a *App) productsList(c *gin.Context) {
 		a.productFailure(c, "iterate public products", err)
 		return
 	}
+	_, currentStage, recheckErr := a.loadPublishedJamStage(c.Request.Context(), jamID)
+	if errors.Is(recheckErr, pgx.ErrNoRows) || recheckErr == nil && currentStage != stage {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if recheckErr != nil {
+		a.productFailure(c, "recheck public product list", recheckErr)
+		return
+	}
 	c.HTML(http.StatusOK, "products_list.html", productsListPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, JamTitle: jamTitle, Products: products, Stage: stage, BumpsMutable: canMutateBumps(stage)})
 }
 
@@ -407,6 +416,15 @@ func (a *App) productDetail(c *gin.Context) {
 	stage := EffectiveStage(schedule, time.Now())
 	if !canDiscloseProducts(stage) {
 		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	_, currentStage, recheckErr := a.loadPublishedJamStage(c.Request.Context(), product.JamID)
+	if errors.Is(recheckErr, pgx.ErrNoRows) || recheckErr == nil && currentStage != stage {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if recheckErr != nil {
+		a.productFailure(c, "recheck public product", recheckErr)
 		return
 	}
 	c.HTML(http.StatusOK, "product_detail.html", productPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Product: product, Stage: stage, BumpsMutable: canMutateBumps(stage)})
@@ -587,7 +605,7 @@ func (a *App) handleAdminFinalProductError(c *gin.Context, jamID int64, err erro
 
 func (a *App) adminProductFailure(c *gin.Context, jamID int64, operation string, err error) {
 	a.logger.Error(operation, "error", err)
-	c.String(http.StatusInternalServerError, "Не удалось выполнить административное действие с продуктом джема %d.", jamID)
+	a.writeError(c, http.StatusInternalServerError, "Не удалось выполнить административное действие с продуктом.")
 }
 
 func (a *App) loadEditableProductTeam(ctx context.Context, jamID, userID int64) (productTeamRecord, error) {

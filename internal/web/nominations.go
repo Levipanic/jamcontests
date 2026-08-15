@@ -377,7 +377,7 @@ func (a *App) adminNominationCreate(c *gin.Context) {
 		return
 	}
 	if !canAdminMutateNominations(stage) {
-		c.String(http.StatusConflict, "После начала голосования номинации изменять нельзя.")
+		a.writeError(c, http.StatusConflict, "После начала голосования номинации изменять нельзя.")
 		return
 	}
 	var nominationID int64
@@ -396,7 +396,7 @@ func (a *App) adminNominationCreate(c *gin.Context) {
 		return
 	}
 	if !open {
-		c.String(http.StatusConflict, "После начала голосования номинации изменять нельзя.")
+		a.writeError(c, http.StatusConflict, "После начала голосования номинации изменять нельзя.")
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -532,7 +532,7 @@ func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64,
 		return
 	}
 	if !canAdminMutateNominations(stage) {
-		c.String(http.StatusConflict, "После начала голосования номинации изменять нельзя.")
+		a.writeError(c, http.StatusConflict, "После начала голосования номинации изменять нельзя.")
 		return
 	}
 	var beforeTitle string
@@ -547,11 +547,11 @@ func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64,
 		return
 	}
 	if withdrawn {
-		c.String(http.StatusConflict, "Отозванную номинацию нельзя изменять.")
+		a.writeError(c, http.StatusConflict, "Отозванную номинацию нельзя изменять.")
 		return
 	}
 	if !withdraw && title == beforeTitle {
-		c.String(http.StatusConflict, "Название номинации не изменилось.")
+		a.writeError(c, http.StatusConflict, "Название номинации не изменилось.")
 		return
 	}
 	before := nominationAuditData(nominationID, jamID, "curator", beforeTitle, 0, 0, false)
@@ -577,7 +577,7 @@ func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64,
 		return
 	}
 	if !open {
-		c.String(http.StatusConflict, "После начала голосования номинации изменять нельзя.")
+		a.writeError(c, http.StatusConflict, "После начала голосования номинации изменять нельзя.")
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -673,7 +673,7 @@ func (a *App) handleAdminNominationLoadError(c *gin.Context, err error) {
 
 func (a *App) adminNominationFailure(c *gin.Context, operation string, err error) {
 	a.logger.Error(operation, "error", err)
-	c.String(http.StatusInternalServerError, "Не удалось выполнить административное действие с номинацией.")
+	a.writeError(c, http.StatusInternalServerError, "Не удалось выполнить административное действие с номинацией.")
 }
 
 func (a *App) nominationFailure(c *gin.Context, operation string, err error) {

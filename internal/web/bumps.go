@@ -47,9 +47,10 @@ func (a *App) productBumps(c *gin.Context) {
 		userID = user.ID
 	}
 	var response bumpCountResponse
+	var jamID int64
 	var stageValue string
 	err := a.pool.QueryRow(c.Request.Context(), `
-		SELECT COALESCE((
+		SELECT product.jam_id, COALESCE((
 			           SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint
 		           FROM product_bumps bump
 		           WHERE bump.product_id=product.id AND bump.jam_id=product.jam_id
@@ -74,7 +75,7 @@ func (a *App) productBumps(c *gin.Context) {
 		      WHEN jam.status_override IS NOT NULL
 		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
 		      ELSE clock_timestamp() >= jam.evaluation_starts_at
-		  END`, productID, userID).Scan(&response.Count, &response.CooldownSeconds, &stageValue)
+		  END`, productID, userID).Scan(&jamID, &response.Count, &response.CooldownSeconds, &stageValue)
 	if errors.Is(err, pgx.ErrNoRows) {
 		bumpNotFound(c)
 		return
@@ -84,6 +85,15 @@ func (a *App) productBumps(c *gin.Context) {
 		return
 	}
 	response.Mutable = canMutateBumps(Stage(stageValue))
+	_, currentStage, recheckErr := a.loadPublishedJamStage(c.Request.Context(), jamID)
+	if errors.Is(recheckErr, pgx.ErrNoRows) || recheckErr == nil && currentStage != Stage(stageValue) {
+		bumpNotFound(c)
+		return
+	}
+	if recheckErr != nil {
+		a.bumpFailure(c, "recheck product bumps", recheckErr)
+		return
+	}
 	c.JSON(http.StatusOK, response)
 }
 

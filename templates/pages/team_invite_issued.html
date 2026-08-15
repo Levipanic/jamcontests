@@ -1,0 +1,5 @@
+{{define "team_invite_issued.html"}}<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Приглашение выпущено</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body class="error-page"><main class="error-dossier"><p class="eyebrow">Одноразовая выдача</p><h1>Приглашение выпущено</h1><p class="lede">Сохраните ссылку сейчас. После ухода со страницы платформа больше не покажет этот токен.</p><p class="error-reference"><a href="/invites/{{.Token}}">/invites/{{.Token}}</a></p><nav class="error-actions"><a href="/teams/{{.TeamID}}">Вернуться к команде</a></nav></main></body>
+</html>{{end}}

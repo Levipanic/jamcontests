@@ -75,10 +75,7 @@
 
     <section aria-labelledby="invite-heading">
       <h2 id="invite-heading">Приглашение</h2>
-      {{if .Team.InvitePath}}
-        <p>Новая ссылка показывается один раз:</p>
-        <p><a href="{{.Team.InvitePath}}">{{.Team.InvitePath}}</a></p>
-      {{else if .Team.InviteLive}}
+      {{if .Team.InviteLive}}
         <p>Действующая ссылка выпущена. Её исходный токен не хранится; выпустите новую, если ссылка потеряна.</p>
       {{else}}
         <p>Действующего приглашения нет.</p>

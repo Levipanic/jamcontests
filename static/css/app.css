@@ -28,6 +28,14 @@ body {
 a { color: inherit; }
 button, input, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
+
+.error-page { min-height: 100vh; display: grid; place-items: center; padding: 2rem; }
+.error-dossier { width: min(46rem, 100%); padding: clamp(2rem, 7vw, 5rem); color: var(--ink); background: var(--paper-light); border: 1px solid var(--line); box-shadow: var(--shadow); transform: rotate(-.2deg); }
+.error-dossier h1 { max-width: none; font-size: clamp(2.8rem, 8vw, 6rem); }
+.error-dossier .lede { color: #4f493f; }
+.error-reference { color: var(--muted); overflow-wrap: anywhere; }
+.error-actions { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 2rem; }
+.error-actions a { padding: .7rem 1rem; border: 1px solid var(--ink); text-decoration: none; text-transform: uppercase; }
 :focus-visible { outline: 3px solid #d45b4f; outline-offset: 4px; }
 
 .site-mark {

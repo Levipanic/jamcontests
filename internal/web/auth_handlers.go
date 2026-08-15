@@ -151,6 +151,9 @@ func (a *App) renderAuthError(c *gin.Context, status int, mode, message string) 
 	if err := a.populateHome(c, &data); err != nil {
 		a.logger.Error("load home after authentication error", "error", err)
 	}
+	if !a.recheckHomeDisclosure(c, &data) {
+		return
+	}
 	a.render(c, status, "home.html", data)
 }
 

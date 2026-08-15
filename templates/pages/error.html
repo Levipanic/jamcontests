@@ -1,0 +1,18 @@
+{{define "error.html"}}<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{.Status}} | Jam Contests</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="error-page">
+  <main class="error-dossier" aria-labelledby="error-title">
+    <p class="eyebrow">Архивная отметка · {{.Status}}</p>
+    <h1 id="error-title">Дело недоступно</h1>
+    <p class="lede">{{.Message}}</p>
+    <p class="error-reference">Номер обращения: <code>{{.RequestID}}</code></p>
+    <nav class="error-actions" aria-label="Навигация"><a href="/">На главную</a><a href="/archive">В архив</a></nav>
+  </main>
+</body>
+</html>{{end}}

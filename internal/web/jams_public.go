@@ -67,7 +67,29 @@ func (a *App) archive(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	current, err := a.loadArchivedJams(c.Request.Context())
+	if err != nil {
+		a.logger.Error("recheck public jam archive", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	if !samePublicJamSet(jams, current) {
+		c.Redirect(http.StatusSeeOther, "/archive")
+		return
+	}
 	c.HTML(http.StatusOK, "archive.html", archivePageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Jams: jams})
+}
+
+func samePublicJamSet(left, right []JamView) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].ID != right[index].ID || left[index].Stage != right[index].Stage || left[index].Title != right[index].Title {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *App) loadPublishedJam(ctx context.Context, jamID int64) (*JamView, error) {

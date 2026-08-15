@@ -610,7 +610,7 @@ func (a *App) handleThemeAdminLoadError(c *gin.Context, operation string, err er
 
 func (a *App) themeAdminFailure(c *gin.Context, operation string, err error) {
 	a.logger.Error(operation, "error", err)
-	c.String(http.StatusInternalServerError, "Не удалось выполнить административное действие.")
+	a.writeError(c, http.StatusInternalServerError, "Не удалось выполнить административное действие.")
 }
 
 func (a *App) themeSelectionFailure(c *gin.Context, teamID int64, err error) {

@@ -64,7 +64,7 @@ func (a *App) allowAuthAttempt(c *gin.Context, action, username string, maximum 
 	allowed, retry := a.authLimit.allow(ipKey, ipMaximum, window)
 	if allowed && username != "" {
 		identityHash := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(username))))
-		identityKey := action + "|identity|" + requestIP(c.Request) + "|" + hex.EncodeToString(identityHash[:])
+		identityKey := action + "|identity|" + hex.EncodeToString(identityHash[:])
 		allowed, retry = a.authLimit.allow(identityKey, maximum, window)
 	}
 	if allowed {

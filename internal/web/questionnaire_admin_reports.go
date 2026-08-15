@@ -88,7 +88,7 @@ func (a *App) questionnaireAdminReportsPage(c *gin.Context) {
 	}
 	selectedTeamID, valid := adminQuestionnaireTeamFilter(c)
 	if !valid {
-		c.String(http.StatusBadRequest, "Некорректный фильтр команды.")
+		a.writeError(c, http.StatusBadRequest, "Некорректный фильтр команды.")
 		return
 	}
 	tx, err := a.pool.BeginTx(c.Request.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
@@ -159,7 +159,7 @@ func (a *App) questionnaireAdminReportsCSV(c *gin.Context) {
 	}
 	selectedTeamID, valid := adminQuestionnaireTeamFilter(c)
 	if !valid {
-		c.String(http.StatusBadRequest, "Некорректный фильтр команды.")
+		a.writeError(c, http.StatusBadRequest, "Некорректный фильтр команды.")
 		return
 	}
 	tx, err := a.pool.BeginTx(c.Request.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})

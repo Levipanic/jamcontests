@@ -1500,5 +1500,5 @@ func (a *App) handleAdminLoadError(c *gin.Context, operation string, err error) 
 
 func (a *App) jamAdminFailure(c *gin.Context, operation string, err error) {
 	a.logger.Error(operation, "error", err)
-	c.String(http.StatusInternalServerError, "Не удалось выполнить административное действие.")
+	a.writeError(c, http.StatusInternalServerError, "Не удалось выполнить административное действие.")
 }

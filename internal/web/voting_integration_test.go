@@ -46,6 +46,11 @@ func TestVotingHTTPMutationCountsSelfVoteAndConcurrency(t *testing.T) {
 	if guestRecorder.Code != http.StatusUnauthorized {
 		t.Fatalf("guest vote status = %d, want 401", guestRecorder.Code)
 	}
+	authCSRFRequest := httptest.NewRequest(http.MethodGet, votingCountsPath(fixture.jamID), nil)
+	authCSRFRequest.AddCookie(sessionCookie)
+	authCSRFRecorder := httptest.NewRecorder()
+	router.ServeHTTP(authCSRFRecorder, authCSRFRequest)
+	csrfCookie = responseCookie(t, authCSRFRecorder.Result(), csrfCookieName)
 
 	response := performVoteRequest(router, fixture.jamID, fixture.nominationID, fixture.productBID, csrfCookie, sessionCookie)
 	if response.Code != http.StatusOK {

@@ -445,6 +445,24 @@ func (a *App) adminControlTeamMemberAdd(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "load member to add", err)
 		return
 	}
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(format('vote-membership:%s:%s', $1::bigint, $2::bigint), 0))`, team.JamID, userID); err != nil {
+		a.adminControlFailure(c, "/admin/teams", "lock member votes", err)
+		return
+	}
+	var hasSelfVote bool
+	if err = tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM nomination_votes vote
+			JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
+			WHERE vote.user_id=$1 AND vote.jam_id=$2 AND product.team_id=$3 AND vote.invalidated_at IS NULL
+		)`, userID, team.JamID, teamID).Scan(&hasSelfVote); err != nil {
+		a.adminControlFailure(c, "/admin/teams", "check member votes", err)
+		return
+	}
+	if hasSelfVote {
+		a.adminControlRedirect(c, "/admin/teams", "Сначала инвалидируйте активные голоса пользователя за продукт этой команды.")
+		return
+	}
 	var memberCount int
 	if err = tx.QueryRow(ctx, `SELECT count(*) FROM team_members WHERE team_id=$1`, teamID).Scan(&memberCount); err != nil {
 		a.adminControlFailure(c, "/admin/teams", "count team members", err)
