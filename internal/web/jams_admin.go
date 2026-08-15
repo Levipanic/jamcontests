@@ -388,6 +388,10 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 		a.renderJamActionError(c, jamID, "Видимость джема уже имеет выбранное значение.")
 		return
 	}
+	if visibility == "draft" && !canUnpublishJam(EffectiveStage(jam.Schedule, time.Now())) {
+		a.renderJamActionError(c, jamID, "Завершённый джем должен оставаться опубликованным в архиве.")
+		return
+	}
 	if visibility == "published" {
 		if jam.QuestionCount < 1 {
 			a.renderJamActionError(c, jamID, "Перед публикацией добавьте хотя бы один вопрос анкеты.")
@@ -407,8 +411,18 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 			return
 		}
 	}
-	if _, err = tx.Exec(c.Request.Context(), `UPDATE jams SET visibility=$2, updated_at=now() WHERE id=$1`, jamID, visibility); err != nil {
+	commandTag, err := tx.Exec(c.Request.Context(), `
+		UPDATE jams SET visibility=$2, updated_at=now()
+		WHERE id=$1 AND ($2::text <> 'draft' OR CASE
+		    WHEN status_override IS NOT NULL THEN status_override <> 'finished'
+		    ELSE clock_timestamp() < finishes_at
+		END)`, jamID, visibility)
+	if err != nil {
 		a.jamAdminFailure(c, "update jam visibility", err)
+		return
+	}
+	if commandTag.RowsAffected() == 0 {
+		a.renderJamActionError(c, jamID, "Завершённый джем должен оставаться опубликованным в архиве.")
 		return
 	}
 	after := jamRecordAuditData(*jam)
@@ -426,6 +440,10 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/edit", jamID))
+}
+
+func canUnpublishJam(stage Stage) bool {
+	return stage == StageUpcoming || stage == StageSubmission || stage == StageEvaluation || stage == StageVoting
 }
 
 func (a *App) overrideJamAdmin(c *gin.Context) {

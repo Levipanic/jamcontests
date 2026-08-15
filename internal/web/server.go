@@ -41,6 +41,7 @@ type PageData struct {
 	AuthUsername     string
 	AuthEmail        string
 	Next             string
+	AutoOpenAuth     bool
 	Jam              *JamView
 	Teams            []HomeTeamView
 	Profile          *ProfileView
@@ -60,6 +61,7 @@ type JamView struct {
 	NextStageAt      *time.Time
 	NextStageRFC3339 string
 	MaxTeamSize      int
+	Dates            []JamDateView
 }
 
 // New constructs the HTTP router. Invalid template syntax is a startup error.
@@ -95,6 +97,8 @@ func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *gin.Engine
 	router.GET("/avatars/:name", app.avatar)
 	router.GET("/health", app.health)
 	router.GET("/", app.home)
+	router.GET("/jams/:id", app.jamDetail)
+	router.GET("/archive", app.archive)
 	router.GET("/login", app.authPage("login"))
 	router.GET("/register", app.authPage("register"))
 	router.POST("/register", app.register)
@@ -249,7 +253,7 @@ func (a *App) render(c *gin.Context, status int, name string, data PageData) {
 }
 
 func (a *App) home(c *gin.Context) {
-	data := PageData{AuthOpen: c.Query("auth") != "", AuthMode: c.DefaultQuery("auth", "login"), Next: safeNext(c.Query("next")), ProfileError: c.Query("profile_error")}
+	data := PageData{AuthOpen: c.Query("auth") != "", AuthMode: c.DefaultQuery("auth", "login"), Next: safeNext(c.Query("next")), ProfileError: c.Query("profile_error"), AutoOpenAuth: true}
 	if err := a.populateHome(c, &data); err != nil {
 		a.logger.Error("load active jam", "error", err)
 		data.Error = "Не удалось загрузить данные. Попробуйте позже."
@@ -274,17 +278,8 @@ func (a *App) activeJam(ctx context.Context) (*JamView, error) {
 		if err := rows.Scan(&jam.ID, &jam.Title, &jam.Description, &jam.Rules, &jam.MaxTeamSize, &schedule.SubmissionStartsAt, &schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override); err != nil {
 			return nil, err
 		}
-		if override != nil {
-			stage := Stage(*override)
-			schedule.Override = &stage
-		}
-		jam.Stage = EffectiveStage(schedule, now)
+		applyPublicJamSchedule(&jam, schedule, override, now)
 		if jam.Stage != StageFinished {
-			jam.NextStageAt = NextBoundary(schedule, jam.Stage)
-			if jam.NextStageAt != nil {
-				jam.NextStageRFC3339 = jam.NextStageAt.UTC().Format(time.RFC3339)
-			}
-			jam.StageIndex = stageIndex(jam.Stage)
 			return &jam, nil
 		}
 	}

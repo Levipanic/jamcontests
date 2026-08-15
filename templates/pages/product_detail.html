@@ -12,4 +12,4 @@
   </section>
   <section data-bump-product="{{.Product.ID}}"><h2>Бампы</h2><p><strong data-bump-count>{{.Product.BumpCount}}</strong></p>{{if and .User .BumpsMutable}}<button type="button" data-bump-action>Бамп</button>{{else if .BumpsMutable}}<a href="/login?next=/products/{{.Product.ID}}">Войдите, чтобы бампнуть</a>{{end}}<p role="status" data-bump-status></p></section>
   <p><a href="/jams/{{.Product.JamID}}/products">Все продукты джема</a></p>
-</main><script src="/static/js/bumps.js" defer></script></body></html>{{end}}
+</main>{{if .BumpsMutable}}<script src="/static/js/bumps.js" defer></script>{{end}}</body></html>{{end}}

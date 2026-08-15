@@ -39,6 +39,11 @@ func (a *App) populateHome(c *gin.Context, data *PageData) error {
 		return err
 	}
 	data.Jam = jam
+	return a.populateJamPage(c, data)
+}
+
+func (a *App) populateJamPage(c *gin.Context, data *PageData) error {
+	jam := data.Jam
 	if jam != nil {
 		teams, err := a.loadHomeTeams(c.Request.Context(), jam.ID, data.User, jam.MaxTeamSize)
 		if err != nil {

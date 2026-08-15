@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/css/app.css">
   <script src="/static/js/app.js" defer></script>
 </head>
-<body data-authenticated="{{if .User}}true{{else}}false{{end}}" data-auth-open="{{if .AuthOpen}}true{{else}}false{{end}}" data-auth-mode="{{.AuthMode}}">
+<body data-authenticated="{{if .User}}true{{else}}false{{end}}" data-auth-open="{{if .AuthOpen}}true{{else}}false{{end}}" data-auth-auto-open="{{if .AutoOpenAuth}}true{{else}}false{{end}}" data-auth-mode="{{.AuthMode}}">
   <nav class="anchor-nav" aria-label="Навигация по делу">
     <a href="#jam"><span>01</span> Джем</a>
     <a href="#teams"><span>02</span> Команды</a>
@@ -20,7 +20,7 @@
     {{if .User}}
       <span class="identity-mark">Личное дело: {{.User.Username}}</span>
     {{else}}
-      <button class="text-button" type="button" data-open-auth="login">Войти / зарегистрироваться</button>
+      <button class="text-button" type="button" data-open-auth="login" data-next="{{.Next}}">Войти / зарегистрироваться</button>
     {{end}}
   </header>
 
@@ -42,13 +42,15 @@
           <li class="{{if eq .Jam.StageIndex 4}}current{{end}}"><span>05</span>Финал</li>
         </ol>
 
-        <div class="timer-card" data-timer data-deadline="{{.Jam.NextStageRFC3339}}" data-stage="{{.Jam.Stage}}">
+        {{if .Jam.NextStageAt}}<div class="timer-card" data-timer data-deadline="{{.Jam.NextStageRFC3339}}" data-stage="{{.Jam.Stage}}">
           <div>
             <p class="eyebrow">До следующей отметки</p>
             <p class="timer" aria-live="polite"><span data-days>00</span><i>д</i> <span data-hours>00</span><i>ч</i> <span data-minutes>00</span><i>м</i> <span data-seconds>00</span><i>с</i></p>
           </div>
           <div class="stage-stamp">{{.Jam.Stage}}</div>
-        </div>
+        </div>{{else}}<div class="timer-card"><p class="eyebrow">{{if eq .Jam.Stage "finished"}}Дело завершено{{else}}Стадия зафиксирована{{end}}</p><div class="stage-stamp">{{.Jam.Stage}}</div></div>{{end}}
+
+        <dl class="jam-dates">{{range .Jam.Dates}}<dt>{{.Label}}</dt><dd><time datetime="{{.RFC3339}}">{{.Moscow}}</time></dd>{{end}}</dl>
 
         {{if .Jam.Rules}}
         <details class="rules-paper">
@@ -76,12 +78,14 @@
         {{if or (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
         <p><a class="action secondary" href="/jams/{{.Jam.ID}}/nominations">Номинации джема</a></p>
         {{end}}
+        <p><a href="/archive">Архив завершённых джемов</a></p>
       {{else}}
         <div class="empty-case">
           <p class="eyebrow">Архивная отметка</p>
           <div class="closed-stamp">Дело закрыто</div>
           <h1 id="jam-title">Новое дело ещё не открыто</h1>
           <p>Здесь появятся фазы, дедлайны и материалы следующего творческого джема.</p>
+          <p><a href="/archive">Открыть архив завершённых джемов</a></p>
         </div>
       {{end}}
     </section>
@@ -157,7 +161,7 @@
       {{else}}
       <div class="guest-profile">
         <p>Личное дело не найдено. Войдите или зарегистрируйтесь, чтобы собрать команду и участвовать в джеме.</p>
-        <button class="action" type="button" data-open-auth="login">Открыть досье</button>
+        <button class="action" type="button" data-open-auth="login" data-next="{{.Next}}">Открыть досье</button>
       </div>
       {{end}}
     </section>

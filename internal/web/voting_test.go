@@ -112,6 +112,35 @@ func TestVotingGuestCanSeeCountsButNotMutation(t *testing.T) {
 	}
 }
 
+func TestFinishedResultsTemplateShowsAllTiedWinnersAndZeroState(t *testing.T) {
+	tmpl, err := loadTemplates("../../templates")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nominations := []NominationView{
+		{ID: 1, Kind: "team", Title: "Tie", AuthorTeamName: "Author Team", Result: &NominationResultView{TotalVotes: 4, Winners: []NominationWinnerView{
+			{ProductID: 10, ProductTitle: "Winner A", TeamID: 20, TeamName: "Team A", VoteCount: 2},
+			{ProductID: 11, ProductTitle: "Winner B", TeamID: 21, TeamName: "Team B", VoteCount: 2},
+		}}},
+		{ID: 2, Kind: "curator", Title: "No votes", Result: &NominationResultView{}},
+	}
+	var output bytes.Buffer
+	if err = tmpl.ExecuteTemplate(&output, "nominations_list.html", nominationsPageData{JamID: 3, JamTitle: "Jam", Stage: StageFinished, Nominations: nominations}); err != nil {
+		t.Fatal(err)
+	}
+	html := output.String()
+	for _, required := range []string{"Winner A", "Winner B", "Author Team", "Голосов: <strong>2</strong>", "Победитель не определён"} {
+		if !strings.Contains(html, required) {
+			t.Errorf("finished result lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{"data-vote-action", "data-vote-product", "/static/js/voting.js", "первое место", "общий победитель"} {
+		if strings.Contains(strings.ToLower(html), forbidden) {
+			t.Errorf("finished result contains %q", forbidden)
+		}
+	}
+}
+
 func TestVotingJavaScriptUsesCSRFAndPolling(t *testing.T) {
 	body, err := os.ReadFile("../../static/js/voting.js")
 	if err != nil {

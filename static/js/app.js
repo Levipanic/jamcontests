@@ -26,7 +26,7 @@
   }
 
   document.querySelectorAll("[data-open-auth]").forEach((button) => {
-    button.addEventListener("click", () => openAuth(button.dataset.openAuth));
+    button.addEventListener("click", () => openAuth(button.dataset.openAuth, button.dataset.next || "/"));
   });
   document.querySelectorAll("[data-auth-required]").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -42,7 +42,7 @@
   });
   dossier?.addEventListener("cancel", () => sessionStorage.setItem("jamcontests-auth-dismissed", "1"));
 
-  if (dossier && (body.dataset.authOpen === "true" || !sessionStorage.getItem("jamcontests-auth-dismissed"))) {
+  if (dossier && (body.dataset.authOpen === "true" || (body.dataset.authAutoOpen === "true" && !sessionStorage.getItem("jamcontests-auth-dismissed")))) {
     openAuth(mode);
   } else {
     selectMode(mode);

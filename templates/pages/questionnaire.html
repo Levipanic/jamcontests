@@ -80,7 +80,7 @@
       {{range .Members}}<li>{{.Username}} — <span>{{if eq .Status "completed"}}завершена{{else}}черновик{{end}}</span></li>{{end}}
     </ul>
   </aside>
-  <p><a href="/">Вернуться на главную</a></p>
+  <p><a href="/jams/{{.JamID}}">Вернуться к джему</a></p>
 </main>
 </body>
 </html>

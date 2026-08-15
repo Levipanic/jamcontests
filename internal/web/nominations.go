@@ -18,6 +18,20 @@ type NominationView struct {
 	Title          string
 	AuthorTeamName string
 	Products       []VotingProductView
+	Result         *NominationResultView
+}
+
+type NominationResultView struct {
+	TotalVotes int64
+	Winners    []NominationWinnerView
+}
+
+type NominationWinnerView struct {
+	ProductID    int64
+	ProductTitle string
+	TeamID       int64
+	TeamName     string
+	VoteCount    int64
 }
 
 type VotingProductView struct {
@@ -140,6 +154,12 @@ func (a *App) nominationsList(c *gin.Context) {
 			return
 		}
 	}
+	if stage == StageFinished {
+		if err = a.populateFinishedResults(c.Request.Context(), jamID, nominations); err != nil {
+			a.nominationFailure(c, "load finished nomination results", err)
+			return
+		}
+	}
 	_, currentStage, err := a.loadPublishedJamStage(c.Request.Context(), jamID)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && !canDiscloseNominations(currentStage) {
 		c.AbortWithStatus(http.StatusNotFound)
@@ -154,6 +174,75 @@ func (a *App) nominationsList(c *gin.Context) {
 		return
 	}
 	c.HTML(http.StatusOK, "nominations_list.html", nominationsPageData{User: CurrentUser(c), CSRFToken: csrfToken(c), JamID: jamID, JamTitle: jamTitle, Stage: stage, Nominations: nominations})
+}
+
+func (a *App) populateFinishedResults(ctx context.Context, jamID int64, nominations []NominationView) error {
+	indexes := make(map[int64]int, len(nominations))
+	for index := range nominations {
+		indexes[nominations[index].ID] = index
+		nominations[index].Result = &NominationResultView{Winners: []NominationWinnerView{}}
+	}
+	rows, err := a.pool.Query(ctx, `
+		WITH public_nominations AS (
+			SELECT nomination.id
+			FROM nominations nomination
+			JOIN jams jam ON jam.id=nomination.jam_id AND jam.visibility='published'
+			WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
+			  AND CASE
+			      WHEN jam.status_override IS NOT NULL THEN jam.status_override='finished'
+			      ELSE clock_timestamp() >= jam.finishes_at
+			  END
+			  AND (nomination.kind='curator' OR EXISTS (
+			      SELECT 1 FROM products author_product
+			      WHERE author_product.id=nomination.product_id
+			        AND author_product.jam_id=nomination.jam_id
+			        AND author_product.status='final'
+			  ))
+		), vote_counts AS (
+			SELECT vote.nomination_id, vote.product_id, count(*)::bigint AS vote_count
+			FROM nomination_votes vote
+			JOIN public_nominations nomination ON nomination.id=vote.nomination_id
+			JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
+			  AND product.status='final'
+			WHERE vote.jam_id=$1
+			GROUP BY vote.nomination_id, vote.product_id
+		), maxima AS (
+			SELECT nomination_id, max(vote_count) AS max_count, sum(vote_count)::bigint AS total_votes
+			FROM vote_counts GROUP BY nomination_id
+		)
+		SELECT nomination.id, COALESCE(maxima.total_votes, 0), winner.product_id,
+		       product.title, product.team_id, team.name, winner.vote_count
+		FROM public_nominations nomination
+		LEFT JOIN maxima ON maxima.nomination_id=nomination.id
+		LEFT JOIN vote_counts winner ON winner.nomination_id=nomination.id
+		  AND winner.vote_count=maxima.max_count AND maxima.total_votes > 0
+		LEFT JOIN products product ON product.id=winner.product_id AND product.jam_id=$1
+		LEFT JOIN teams team ON team.id=product.team_id AND team.jam_id=product.jam_id
+		ORDER BY nomination.id, product.finalized_at, product.id`, jamID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var nominationID, totalVotes int64
+		var productID, teamID, voteCount *int64
+		var productTitle, teamName *string
+		if err = rows.Scan(&nominationID, &totalVotes, &productID, &productTitle, &teamID, &teamName, &voteCount); err != nil {
+			return err
+		}
+		index, ok := indexes[nominationID]
+		if !ok {
+			continue
+		}
+		nominations[index].Result.TotalVotes = totalVotes
+		if productID != nil && productTitle != nil && teamID != nil && teamName != nil && voteCount != nil {
+			nominations[index].Result.Winners = append(nominations[index].Result.Winners, NominationWinnerView{
+				ProductID: *productID, ProductTitle: *productTitle, TeamID: *teamID,
+				TeamName: *teamName, VoteCount: *voteCount,
+			})
+		}
+	}
+	return rows.Err()
 }
 
 func (a *App) populateVotingProducts(ctx context.Context, jamID int64, user *User, nominations []NominationView) error {

@@ -132,6 +132,7 @@ func TestPageTemplatesExecute(t *testing.T) {
 		{"products_list.html", productsListPageData{User: user, CSRFToken: "token", JamID: 1, JamTitle: "Jam"}},
 		{"product_detail.html", productPageData{User: user, CSRFToken: "token", Product: ProductView{ID: 1, JamID: 1, TeamID: 1, Title: "Product"}}},
 		{"nominations_list.html", nominationsPageData{User: user, CSRFToken: "token", JamID: 1, JamTitle: "Jam", Stage: StageVoting}},
+		{"archive.html", archivePageData{User: user, CSRFToken: "token", Jams: []JamView{{ID: 1, Title: "Jam", Stage: StageFinished, Dates: []JamDateView{{}, {}, {}, {Moscow: "01.01.2026 15:00 МСК"}}}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

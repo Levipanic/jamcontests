@@ -253,6 +253,11 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .ballot-option small { display: block; margin-top: .25rem; color: #625a4f; }
 .ballot-option strong { min-width: 2.5rem; text-align: right; }
 .ballot-option:has(input:disabled) { opacity: .62; }
+.jam-dates { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 1.5rem 0; }
+.archive-index, .result-list, .winner-list { display: grid; gap: 1rem; }
+.archive-index > article, .nomination-result, .winner-card { padding: 1.2rem; border: 1px solid var(--line); background: #f2e9d8; }
+.winner-list { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+.winner-stamp { display: inline-block; padding: .3rem .5rem; border: 2px solid var(--red); color: var(--red); font-size: .7rem; font-weight: 700; text-transform: uppercase; transform: rotate(-1deg); }
 
 @media (max-width: 760px) {
   .site-mark { position: absolute; }

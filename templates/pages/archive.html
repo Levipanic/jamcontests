@@ -1,0 +1,15 @@
+{{define "archive.html"}}<!doctype html>
+<html lang="ru"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
+  <title>Архив творческих джемов</title><link rel="stylesheet" href="/static/css/app.css">
+</head><body><main class="dossier">
+  <header class="case-heading"><p class="eyebrow">Закрытые дела</p><h1>Архив творческих джемов</h1></header>
+  {{if .Jams}}<section class="archive-index">{{range .Jams}}<article class="paper-card">
+    <p class="eyebrow">Архивное дело № {{.ID}}</p><h2><a href="/jams/{{.ID}}">{{.Title}}</a></h2>
+    {{if .Description}}<p>{{.Description}}</p>{{end}}
+    {{with index .Dates 3}}<p>Завершение: <time datetime="{{.RFC3339}}">{{.Moscow}}</time></p>{{end}}
+    <p><a href="/jams/{{.ID}}/products">Продукты</a> · <a href="/jams/{{.ID}}/nominations">Результаты номинаций</a></p>
+  </article>{{end}}</section>{{else}}<p class="empty-row">В архиве пока нет завершённых джемов.</p>{{end}}
+  <p><a href="/">Вернуться к текущему делу</a></p>
+</main></body></html>{{end}}

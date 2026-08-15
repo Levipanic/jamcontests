@@ -22,11 +22,23 @@
       {{else}}<p class="empty-row">Нет доступных продуктов.</p>{{end}}
     </article>{{end}}
   </section>
+  {{else if eq .Stage "finished"}}
+  <section class="result-list" aria-label="Результаты номинаций">
+    {{range .Nominations}}<article class="paper-card nomination-result">
+      <p class="eyebrow">Номинация{{if eq .Kind "curator"}} / кураторская{{end}}</p><h2>{{.Title}}</h2>
+      {{if eq .Kind "team"}}<p>Автор номинации: {{.AuthorTeamName}}</p>{{end}}
+      {{if and .Result (gt .Result.TotalVotes 0)}}<p>Всего голосов: {{.Result.TotalVotes}}</p>
+        <div class="winner-list">{{range .Result.Winners}}<article class="winner-card"><span class="winner-stamp">Победитель номинации</span>
+          <h3><a href="/products/{{.ProductID}}">{{.ProductTitle}}</a></h3><p>Команда: <a href="/teams/{{.TeamID}}">{{.TeamName}}</a></p><p>Голосов: <strong>{{.VoteCount}}</strong></p>
+        </article>{{end}}</div>
+      {{else}}<p class="empty-row">Голоса в этой номинации не поданы. Победитель не определён.</p>{{end}}
+    </article>{{end}}
+  </section>
   {{else}}
   <section class="folder-scroll" aria-label="Номинации джема">
-    {{range .Nominations}}<article class="team-folder"><span class="folder-tab">Номинация</span><span class="folder-body"><span class="folder-copy"><strong>{{.Title}}</strong>{{if eq .Kind "curator"}}<small>Кураторская номинация</small>{{end}}{{if and (eq $.Stage "finished") (eq .Kind "team")}}<span>Автор: {{.AuthorTeamName}}</span>{{end}}</span></span></article>{{end}}
+    {{range .Nominations}}<article class="team-folder"><span class="folder-tab">Номинация</span><span class="folder-body"><span class="folder-copy"><strong>{{.Title}}</strong>{{if eq .Kind "curator"}}<small>Кураторская номинация</small>{{end}}</span></span></article>{{end}}
   </section>
   {{end}}
   {{else}}<p class="empty-row">Активных номинаций нет.</p>{{end}}
-  <p><a href="/">Вернуться к делу</a></p>
+  <p><a href="/jams/{{.JamID}}">Вернуться к джему</a></p>
 </main>{{if eq .Stage "voting"}}<script src="/static/js/voting.js" defer></script>{{end}}</body></html>{{end}}
