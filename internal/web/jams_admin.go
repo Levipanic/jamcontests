@@ -76,15 +76,19 @@ type adminQuestionForm struct {
 
 type jamAdminPageData struct {
 	PageData
-	Jams                []adminJam
-	Jam                 *adminJam
-	JamForm             adminJamForm
-	Questions           []adminQuestion
-	QuestionForm        adminQuestionForm
-	EditingQuestion     bool
-	QuestionnaireLocked bool
-	MoscowZone          string
-	Development         bool
+	Jams                   []adminJam
+	Jam                    *adminJam
+	JamForm                adminJamForm
+	Questions              []adminQuestion
+	QuestionForm           adminQuestionForm
+	EditingQuestion        bool
+	QuestionnaireLocked    bool
+	QuestionnaireRevision  int
+	QuestionnaireResponses int
+	QuestionnaireDrafts    int
+	QuestionnaireCompleted int
+	MoscowZone             string
+	Development            bool
 }
 
 // registerJamAdminRoutes installs the jam administration surface. The caller
@@ -106,6 +110,10 @@ func (a *App) registerJamAdminRoutes(router *gin.Engine) {
 	admin.GET("/jams/:id/questionnaire/questions/:questionID/edit", a.editQuestionAdminPage)
 	admin.POST("/jams/:id/questionnaire/questions/:questionID/edit", a.updateQuestionAdmin)
 	admin.POST("/jams/:id/questionnaire/questions/:questionID/delete", a.deleteQuestionAdmin)
+	admin.POST("/jams/:id/questionnaire/reset", a.resetQuestionnaireAdmin)
+	admin.GET("/jams/:id/questionnaire/reports", a.questionnaireAdminReportsPage)
+	admin.GET("/jams/:id/questionnaire/reports/responses/:responseID", a.questionnaireAdminResponsePage)
+	admin.GET("/jams/:id/questionnaire/reports.csv", a.questionnaireAdminReportsCSV)
 }
 
 func (a *App) jamAdminDashboard(c *gin.Context) {
@@ -545,7 +553,11 @@ func (a *App) questionnaireAdminPage(c *gin.Context) {
 	if !ok {
 		return
 	}
-	a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{Type: "short_text", TextLimit: "500"}, false, "", http.StatusOK)
+	message := ""
+	if c.Query("reset") == "1" {
+		message = "Создана новая ревизия анкеты. Исторические ответы сохранены и больше не влияют на допуск."
+	}
+	a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{Type: "short_text", TextLimit: "500"}, false, message, http.StatusOK)
 }
 
 func (a *App) editQuestionAdminPage(c *gin.Context) {
@@ -642,10 +654,13 @@ func (a *App) mutateQuestionAdmin(c *gin.Context, editing bool) {
 		}
 	} else {
 		err = tx.QueryRow(c.Request.Context(), `
-			INSERT INTO questionnaire_questions (questionnaire_id, type, prompt, hint, required,
+			INSERT INTO questionnaire_questions (questionnaire_id, revision, type, prompt, hint, required,
 			       text_limit, selection_limit, position)
-			SELECT $1, $2, $3, $4, $5, $6, $7, COALESCE(max(position)+1, 0)
-			FROM questionnaire_questions WHERE questionnaire_id=$1 RETURNING id, position`,
+			SELECT questionnaire.id, questionnaire.current_revision, $2, $3, $4, $5, $6, $7,
+			       COALESCE((SELECT max(question.position)+1 FROM questionnaire_questions question
+			                 WHERE question.questionnaire_id=questionnaire.id
+			                   AND question.revision=questionnaire.current_revision), 0)
+			FROM questionnaires questionnaire WHERE questionnaire.id=$1 RETURNING id, position`,
 			questionnaireID, question.Type, question.Prompt, nullableString(question.Hint), question.Required,
 			nullablePositive(question.TextLimit), nullablePositive(question.SelectionLimit)).Scan(&questionID, &question.Position)
 		if err != nil {
@@ -734,6 +749,177 @@ func (a *App) deleteQuestionAdmin(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/questionnaire", jamID))
 }
 
+func (a *App) resetQuestionnaireAdmin(c *gin.Context) {
+	jamID, ok := adminID(c, "id")
+	if !ok {
+		return
+	}
+	reason, err := validateReason(c.PostForm("reason"))
+	if err != nil {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	if c.PostForm("confirm") != "СБРОСИТЬ ОТВЕТЫ" {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Введите точную фразу подтверждения: СБРОСИТЬ ОТВЕТЫ", http.StatusUnprocessableEntity)
+		return
+	}
+	ctx := c.Request.Context()
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		a.jamAdminFailure(c, "begin questionnaire reset", err)
+		return
+	}
+	defer tx.Rollback(ctx)
+	var questionnaireID int64
+	var revision int
+	var visibility string
+	var schedule Schedule
+	var override *string
+	err = tx.QueryRow(ctx, `
+		SELECT questionnaire.id, questionnaire.current_revision, jam.visibility,
+		       jam.submission_starts_at, jam.evaluation_starts_at, jam.voting_starts_at,
+		       jam.finishes_at, jam.status_override
+		FROM questionnaires questionnaire JOIN jams jam ON jam.id=questionnaire.jam_id
+		WHERE jam.id=$1 FOR UPDATE OF questionnaire, jam`, jamID).Scan(
+		&questionnaireID, &revision, &visibility, &schedule.SubmissionStartsAt,
+		&schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override)
+	if err != nil {
+		a.handleAdminLoadError(c, "lock questionnaire reset", err)
+		return
+	}
+	if override != nil {
+		stage := Stage(*override)
+		schedule.Override = &stage
+	}
+	if visibility != "draft" || EffectiveStage(schedule, time.Now()) != StageUpcoming {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Сброс доступен только для draft-джема на стадии upcoming.", http.StatusConflict)
+		return
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT id, status FROM questionnaire_responses
+		WHERE questionnaire_id=$1 AND revision=$2 ORDER BY id FOR UPDATE`, questionnaireID, revision)
+	if err != nil {
+		a.jamAdminFailure(c, "lock questionnaire responses for reset", err)
+		return
+	}
+	type resetResponse struct {
+		id       int64
+		status   string
+		snapshot []byte
+	}
+	var responses []resetResponse
+	drafts, completed := 0, 0
+	for rows.Next() {
+		var response resetResponse
+		if err = rows.Scan(&response.id, &response.status); err != nil {
+			rows.Close()
+			a.jamAdminFailure(c, "scan questionnaire reset responses", err)
+			return
+		}
+		responses = append(responses, response)
+		if response.status == "completed" {
+			completed++
+		} else {
+			drafts++
+		}
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		a.jamAdminFailure(c, "iterate questionnaire reset responses", err)
+		return
+	}
+	rows.Close()
+	if len(responses) == 0 {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "В текущей ревизии нет ответов для сброса.", http.StatusConflict)
+		return
+	}
+	for index := range responses {
+		responses[index].snapshot, err = questionnaireBuildSnapshot(ctx, tx, questionnaireID, responses[index].id)
+		if err != nil {
+			a.jamAdminFailure(c, "snapshot questionnaire reset response", err)
+			return
+		}
+	}
+	var questionCount int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM questionnaire_questions WHERE questionnaire_id=$1 AND revision=$2`, questionnaireID, revision).Scan(&questionCount); err != nil {
+		a.jamAdminFailure(c, "count questionnaire reset questions", err)
+		return
+	}
+	newRevision := revision + 1
+	before := map[string]any{"questionnaire_id": questionnaireID, "revision": revision, "question_count": questionCount, "response_count": len(responses), "draft_count": drafts, "completed_count": completed}
+	after := map[string]any{"questionnaire_id": questionnaireID, "revision": newRevision, "source_revision": revision, "question_count": questionCount, "response_count": 0, "reset_history_events": len(responses)}
+	auditID, err := insertAdminAuditReturningID(ctx, tx, CurrentUser(c), "questionnaire.responses_reset", "questionnaire", questionnaireID, reason, before, after)
+	if err != nil {
+		a.jamAdminFailure(c, "audit questionnaire reset", err)
+		return
+	}
+	for _, response := range responses {
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO questionnaire_response_history (response_id, event, snapshot, admin_audit_log_id)
+			VALUES ($1, 'admin_reset', $2::jsonb, $3)`, response.id, string(response.snapshot), auditID); err != nil {
+			a.jamAdminFailure(c, "record questionnaire reset history", err)
+			return
+		}
+	}
+	if _, err = tx.Exec(ctx, `UPDATE questionnaires SET current_revision=$2, updated_at=now() WHERE id=$1 AND current_revision=$3`, questionnaireID, newRevision, revision); err != nil {
+		a.jamAdminFailure(c, "advance questionnaire revision", err)
+		return
+	}
+	questionRows, err := tx.Query(ctx, `
+		SELECT id, type, prompt, hint, required, text_limit, selection_limit, position
+		FROM questionnaire_questions WHERE questionnaire_id=$1 AND revision=$2 ORDER BY position, id`, questionnaireID, revision)
+	if err != nil {
+		a.jamAdminFailure(c, "load questionnaire structure for reset", err)
+		return
+	}
+	type resetQuestion struct {
+		id                        int64
+		typeValue, prompt         string
+		hint                      *string
+		required                  bool
+		textLimit, selectionLimit *int
+		position                  int
+	}
+	var questions []resetQuestion
+	for questionRows.Next() {
+		var question resetQuestion
+		if err = questionRows.Scan(&question.id, &question.typeValue, &question.prompt, &question.hint, &question.required, &question.textLimit, &question.selectionLimit, &question.position); err != nil {
+			questionRows.Close()
+			a.jamAdminFailure(c, "scan questionnaire reset structure", err)
+			return
+		}
+		questions = append(questions, question)
+	}
+	if err = questionRows.Err(); err != nil {
+		questionRows.Close()
+		a.jamAdminFailure(c, "iterate questionnaire reset structure", err)
+		return
+	}
+	questionRows.Close()
+	for _, question := range questions {
+		var newQuestionID int64
+		err = tx.QueryRow(ctx, `
+			INSERT INTO questionnaire_questions (questionnaire_id, revision, type, prompt, hint, required, text_limit, selection_limit, position)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`, questionnaireID, newRevision,
+			question.typeValue, question.prompt, question.hint, question.required, question.textLimit, question.selectionLimit, question.position).Scan(&newQuestionID)
+		if err != nil {
+			a.jamAdminFailure(c, "clone questionnaire reset question", err)
+			return
+		}
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO questionnaire_options (question_id, label, position)
+			SELECT $1, label, position FROM questionnaire_options WHERE question_id=$2 ORDER BY position, id`, newQuestionID, question.id); err != nil {
+			a.jamAdminFailure(c, "clone questionnaire reset options", err)
+			return
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		a.jamAdminFailure(c, "commit questionnaire reset", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/questionnaire?reset=1", jamID))
+}
+
 func (a *App) renderJamAdmin(c *gin.Context, status int, name string, data jamAdminPageData) {
 	data.User = CurrentUser(c)
 	data.CSRFToken = csrfToken(c)
@@ -769,6 +955,18 @@ func (a *App) renderQuestionnaireAdmin(c *gin.Context, jamID int64, form adminQu
 		a.handleAdminLoadError(c, "load questionnaire builder", err)
 		return
 	}
+	var revision, responses, drafts, completed int
+	if err = a.pool.QueryRow(c.Request.Context(), `
+		SELECT questionnaire.current_revision, count(response.id),
+		       count(response.id) FILTER (WHERE response.status='draft'),
+		       count(response.id) FILTER (WHERE response.status='completed')
+		FROM questionnaires questionnaire
+		LEFT JOIN questionnaire_responses response ON response.questionnaire_id=questionnaire.id
+		  AND response.revision=questionnaire.current_revision
+		WHERE questionnaire.jam_id=$1 GROUP BY questionnaire.id`, jamID).Scan(&revision, &responses, &drafts, &completed); err != nil {
+		a.handleAdminLoadError(c, "load questionnaire revision summary", err)
+		return
+	}
 	if form.Type == "" {
 		form.Type = "short_text"
 		form.TextLimit = "500"
@@ -776,6 +974,8 @@ func (a *App) renderQuestionnaireAdmin(c *gin.Context, jamID int64, form adminQu
 	a.renderJamAdmin(c, status, "admin_questionnaire.html", jamAdminPageData{
 		PageData: PageData{Error: message}, Jam: jam, Questions: questions,
 		QuestionForm: form, EditingQuestion: editing, QuestionnaireLocked: locked,
+		QuestionnaireRevision: revision, QuestionnaireResponses: responses,
+		QuestionnaireDrafts: drafts, QuestionnaireCompleted: completed,
 	})
 }
 
@@ -786,7 +986,7 @@ func (a *App) loadAdminJams(ctx context.Context) ([]adminJam, error) {
 		       j.max_team_size, count(qn.id)
 		FROM jams j
 		LEFT JOIN questionnaires q ON q.jam_id=j.id
-		LEFT JOIN questionnaire_questions qn ON qn.questionnaire_id=q.id
+		LEFT JOIN questionnaire_questions qn ON qn.questionnaire_id=q.id AND qn.revision=q.current_revision
 		GROUP BY j.id ORDER BY j.created_at DESC, j.id DESC`)
 	if err != nil {
 		return nil, err
@@ -817,7 +1017,8 @@ func adminJamSQL(lock bool) string {
 		       j.evaluation_starts_at, j.voting_starts_at, j.finishes_at, j.status_override,
 		       j.max_team_size,
 		       (SELECT count(*) FROM questionnaire_questions qn
-		        JOIN questionnaires q ON q.id=qn.questionnaire_id WHERE q.jam_id=j.id)
+		        JOIN questionnaires q ON q.id=qn.questionnaire_id
+		        WHERE q.jam_id=j.id AND qn.revision=q.current_revision)
 		FROM jams j WHERE j.id=$1`
 	if lock {
 		query += ` FOR UPDATE`
@@ -855,8 +1056,9 @@ func scanAdminJam(row rowScanner) (*adminJam, error) {
 
 func (a *App) loadAdminQuestions(ctx context.Context, jamID int64) ([]adminQuestion, bool, error) {
 	var questionnaireID int64
+	var revision int
 	var visibility string
-	err := a.pool.QueryRow(ctx, `SELECT q.id, j.visibility FROM questionnaires q JOIN jams j ON j.id=q.jam_id WHERE j.id=$1`, jamID).Scan(&questionnaireID, &visibility)
+	err := a.pool.QueryRow(ctx, `SELECT q.id, q.current_revision, j.visibility FROM questionnaires q JOIN jams j ON j.id=q.jam_id WHERE j.id=$1`, jamID).Scan(&questionnaireID, &revision, &visibility)
 	if err != nil {
 		return nil, false, err
 	}
@@ -871,8 +1073,8 @@ func (a *App) loadAdminQuestions(ctx context.Context, jamID int64) ([]adminQuest
 		       COALESCE(array_agg(o.label ORDER BY o.position) FILTER (WHERE o.id IS NOT NULL), ARRAY[]::varchar[])
 		FROM questionnaire_questions q
 		LEFT JOIN questionnaire_options o ON o.question_id=q.id
-		WHERE q.questionnaire_id=$1
-		GROUP BY q.id ORDER BY q.position`, questionnaireID)
+		WHERE q.questionnaire_id=$1 AND q.revision=$2
+		GROUP BY q.id ORDER BY q.position`, questionnaireID, revision)
 	if err != nil {
 		return nil, false, err
 	}
@@ -903,7 +1105,9 @@ type queryDB interface {
 }
 
 func loadAdminQuestionTx(ctx context.Context, db queryDB, questionnaireID, questionID int64, lock bool) (*adminQuestion, error) {
-	query := `SELECT id, type, prompt, COALESCE(hint, ''), required, COALESCE(text_limit, 0), COALESCE(selection_limit, 0), position FROM questionnaire_questions WHERE questionnaire_id=$1 AND id=$2`
+	query := `SELECT question.id, question.type, question.prompt, COALESCE(question.hint, ''), question.required, COALESCE(question.text_limit, 0), COALESCE(question.selection_limit, 0), question.position
+		FROM questionnaire_questions question JOIN questionnaires questionnaire ON questionnaire.id=question.questionnaire_id
+		WHERE question.questionnaire_id=$1 AND question.id=$2 AND question.revision=questionnaire.current_revision`
 	if lock {
 		query += ` FOR UPDATE`
 	}
@@ -951,12 +1155,18 @@ type queryRower interface {
 
 func questionnaireHasAnswers(ctx context.Context, db queryRower, questionnaireID int64) (bool, error) {
 	var exists bool
-	err := db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM questionnaire_responses WHERE questionnaire_id=$1)`, questionnaireID).Scan(&exists)
+	err := db.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM questionnaire_responses response
+		JOIN questionnaires questionnaire ON questionnaire.id=response.questionnaire_id
+		WHERE response.questionnaire_id=$1 AND response.revision=questionnaire.current_revision
+	)`, questionnaireID).Scan(&exists)
 	return exists, err
 }
 
 func moveQuestion(ctx context.Context, tx pgx.Tx, questionnaireID, questionID int64, requested int) (int, error) {
-	rows, err := tx.Query(ctx, `SELECT id FROM questionnaire_questions WHERE questionnaire_id=$1 ORDER BY position`, questionnaireID)
+	rows, err := tx.Query(ctx, `SELECT question.id FROM questionnaire_questions question
+		JOIN questionnaires questionnaire ON questionnaire.id=question.questionnaire_id
+		WHERE question.questionnaire_id=$1 AND question.revision=questionnaire.current_revision ORDER BY question.position`, questionnaireID)
 	if err != nil {
 		return 0, err
 	}
@@ -986,7 +1196,8 @@ func moveQuestion(ctx context.Context, tx pgx.Tx, questionnaireID, questionID in
 	copy(ids[requested+1:], ids[requested:])
 	ids[requested] = questionID
 	// Move positions out of the target range first to avoid transient UNIQUE collisions.
-	if _, err = tx.Exec(ctx, `UPDATE questionnaire_questions SET position=position+1000000 WHERE questionnaire_id=$1`, questionnaireID); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE questionnaire_questions SET position=position+1000000
+		WHERE questionnaire_id=$1 AND revision=(SELECT current_revision FROM questionnaires WHERE id=$1)`, questionnaireID); err != nil {
 		return 0, err
 	}
 	for position, id := range ids {
@@ -1015,29 +1226,35 @@ func hasOtherActivePublishedJam(ctx context.Context, tx pgx.Tx, jamID int64, now
 }
 
 func insertAdminAudit(ctx context.Context, tx pgx.Tx, user *User, action, entityType string, entityID int64, reason string, before, after any) error {
+	_, err := insertAdminAuditReturningID(ctx, tx, user, action, entityType, entityID, reason, before, after)
+	return err
+}
+
+func insertAdminAuditReturningID(ctx context.Context, tx pgx.Tx, user *User, action, entityType string, entityID int64, reason string, before, after any) (int64, error) {
 	if user == nil {
-		return errors.New("missing administrator in request context")
+		return 0, errors.New("missing administrator in request context")
 	}
 	var currentRole string
 	if err := tx.QueryRow(ctx, `SELECT role FROM users WHERE id=$1 FOR KEY SHARE`, user.ID).Scan(&currentRole); err != nil {
-		return err
+		return 0, err
 	}
 	if currentRole != "admin" {
-		return errors.New("administrator role was revoked during the request")
+		return 0, errors.New("administrator role was revoked during the request")
 	}
 	beforeJSON, err := auditJSON(before)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	afterJSON, err := auditJSON(after)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	_, err = tx.Exec(ctx, `
+	var auditID int64
+	err = tx.QueryRow(ctx, `
 		INSERT INTO admin_audit_log (admin_user_id, action, entity_type, entity_id, reason, before_data, after_data)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)`,
-		user.ID, action, entityType, entityID, reason, beforeJSON, afterJSON)
-	return err
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb) RETURNING id`,
+		user.ID, action, entityType, entityID, reason, beforeJSON, afterJSON).Scan(&auditID)
+	return auditID, err
 }
 
 func auditJSON(value any) (any, error) {

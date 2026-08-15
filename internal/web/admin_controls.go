@@ -569,7 +569,8 @@ func (a *App) loadAdminControlTeams(ctx context.Context) ([]adminControlTeam, er
 		       EXISTS (
 		           SELECT 1 FROM team_members em
 		           JOIN questionnaires q ON q.jam_id=em.jam_id
-		           JOIN questionnaire_responses r ON r.questionnaire_id=q.id AND r.user_id=em.user_id AND r.status='completed'
+		           JOIN questionnaire_responses r ON r.questionnaire_id=q.id AND r.revision=q.current_revision
+		             AND r.user_id=em.user_id AND r.status='completed'
 		           WHERE em.team_id=t.id
 		       )
 		FROM teams t

@@ -285,6 +285,7 @@ func (a *App) teamDetail(c *gin.Context) {
 				SELECT 1 FROM team_members member
 				JOIN questionnaires q ON q.jam_id = member.jam_id
 				JOIN questionnaire_responses qr ON qr.questionnaire_id = q.id
+					AND qr.revision=q.current_revision
 					AND qr.user_id = member.user_id AND qr.status = 'completed'
 				WHERE member.team_id = $1
 			) OR COALESCE((SELECT allowed FROM team_eligibility_overrides WHERE team_id = $1), false)`, teamID).Scan(&view.Eligible)
@@ -318,7 +319,8 @@ func (a *App) teamDetail(c *gin.Context) {
 		       CASE WHEN $2 THEN EXISTS (
 			   SELECT 1 FROM questionnaires q
 			   JOIN questionnaire_responses qr ON qr.questionnaire_id = q.id
-			   WHERE q.jam_id = tm.jam_id AND qr.user_id = tm.user_id AND qr.status = 'completed'
+			   WHERE q.jam_id = tm.jam_id AND qr.revision=q.current_revision
+			     AND qr.user_id = tm.user_id AND qr.status = 'completed'
 		       ) ELSE false END
 		FROM team_members tm JOIN users u ON u.id = tm.user_id
 		WHERE tm.team_id = $1

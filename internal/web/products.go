@@ -644,6 +644,7 @@ func validateFinalProductTx(ctx context.Context, tx pgx.Tx, team productTeamReco
 			SELECT 1 FROM team_members member
 			JOIN questionnaires q ON q.jam_id=member.jam_id
 			JOIN questionnaire_responses response ON response.questionnaire_id=q.id
+			  AND response.revision=q.current_revision
 				AND response.user_id=member.user_id AND response.status='completed'
 			WHERE member.team_id=$1 AND member.jam_id=$2
 		) OR COALESCE((SELECT allowed FROM team_eligibility_overrides WHERE team_id=$1), false)`, team.ID, team.JamID).Scan(&eligible); err != nil {

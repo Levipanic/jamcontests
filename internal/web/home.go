@@ -88,6 +88,7 @@ func (a *App) loadHomeTeams(ctx context.Context, jamID int64, user *User, maxSiz
 		           SELECT 1 FROM team_members eligible_member
 		           JOIN questionnaires q ON q.jam_id = eligible_member.jam_id
 		           JOIN questionnaire_responses response ON response.questionnaire_id = q.id
+		                AND response.revision=q.current_revision
 		                AND response.user_id = eligible_member.user_id AND response.status = 'completed'
 		           WHERE eligible_member.team_id = t.id
 		       ) OR COALESCE((SELECT allowed FROM team_eligibility_overrides WHERE team_id = t.id), false)
@@ -130,13 +131,15 @@ func (a *App) loadProfile(ctx context.Context, user *User, jam *JamView) (*Profi
 		           SELECT 1 FROM team_members eligible_member
 		           JOIN questionnaires q2 ON q2.jam_id = eligible_member.jam_id
 		           JOIN questionnaire_responses response ON response.questionnaire_id = q2.id
+		                AND response.revision=q2.current_revision
 		                AND response.user_id = eligible_member.user_id AND response.status = 'completed'
 		           WHERE eligible_member.team_id = t.id
 		       ) OR COALESCE((SELECT allowed FROM team_eligibility_overrides WHERE team_id = t.id), false)
 		FROM team_members tm
 		JOIN teams t ON t.id = tm.team_id
 		JOIN questionnaires q ON q.jam_id = tm.jam_id
-		LEFT JOIN questionnaire_responses r ON r.questionnaire_id = q.id AND r.user_id = tm.user_id
+		LEFT JOIN questionnaire_responses r ON r.questionnaire_id = q.id
+		  AND r.revision=q.current_revision AND r.user_id = tm.user_id
 		WHERE tm.jam_id = $1 AND tm.user_id = $2`, jam.ID, user.ID).Scan(
 		&profile.TeamID, &profile.TeamName, &captainID, &profile.QuestionnaireStatus, &profile.Eligible)
 	if errors.Is(err, pgx.ErrNoRows) {

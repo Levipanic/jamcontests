@@ -20,6 +20,7 @@ type questionnaireAccess struct {
 	JamID           int64
 	JamTitle        string
 	QuestionnaireID int64
+	Revision        int
 	TeamID          int64
 	Stage           Stage
 }
@@ -70,6 +71,8 @@ type questionnaireAutosaveInput struct {
 type questionnaireQuestionRule struct {
 	ID             int64
 	Type           string
+	Prompt         string
+	Position       int
 	Required       bool
 	TextLimit      int
 	SelectionLimit int
@@ -80,10 +83,13 @@ type questionnaireSnapshot struct {
 }
 
 type questionnaireSnapshotAnswer struct {
-	QuestionID int64   `json:"question_id"`
-	Type       string  `json:"type"`
-	Text       *string `json:"text,omitempty"`
-	OptionIDs  []int64 `json:"option_ids,omitempty"`
+	QuestionID   int64    `json:"question_id"`
+	Type         string   `json:"type"`
+	Prompt       string   `json:"prompt,omitempty"`
+	Position     int      `json:"position,omitempty"`
+	Text         *string  `json:"text,omitempty"`
+	OptionIDs    []int64  `json:"option_ids,omitempty"`
+	OptionLabels []string `json:"option_labels,omitempty"`
 }
 
 type questionnaireValidationError struct {
@@ -334,7 +340,7 @@ type questionnaireQueryRower interface {
 
 func (a *App) questionnaireLoadAccess(ctx context.Context, db questionnaireQueryRower, jamID, userID int64, lock bool) (questionnaireAccess, error) {
 	query := `
-		SELECT j.id, j.title, q.id, t.id, j.submission_starts_at,
+		SELECT j.id, j.title, q.id, q.current_revision, t.id, j.submission_starts_at,
 		       j.evaluation_starts_at, j.voting_starts_at, j.finishes_at, j.status_override
 		FROM jams j
 		JOIN questionnaires q ON q.jam_id = j.id
@@ -348,7 +354,7 @@ func (a *App) questionnaireLoadAccess(ctx context.Context, db questionnaireQuery
 	var schedule Schedule
 	var override *string
 	err := db.QueryRow(ctx, query, jamID, userID).Scan(
-		&access.JamID, &access.JamTitle, &access.QuestionnaireID, &access.TeamID,
+		&access.JamID, &access.JamTitle, &access.QuestionnaireID, &access.Revision, &access.TeamID,
 		&schedule.SubmissionStartsAt, &schedule.EvaluationStartsAt, &schedule.VotingStartsAt,
 		&schedule.FinishesAt, &override,
 	)
@@ -365,8 +371,12 @@ func (a *App) questionnaireLoadAccess(ctx context.Context, db questionnaireQuery
 
 func (a *App) questionnaireLoadOwnAnswers(ctx context.Context, questionnaireID, userID int64) ([]questionnaireQuestionView, string, error) {
 	rows, err := a.pool.Query(ctx, `
-		SELECT id, type, prompt, hint, required, text_limit, selection_limit
-		FROM questionnaire_questions WHERE questionnaire_id = $1 ORDER BY position, id`, questionnaireID)
+		SELECT question.id, question.type, question.prompt, question.hint, question.required,
+		       question.text_limit, question.selection_limit
+		FROM questionnaire_questions question
+		JOIN questionnaires questionnaire ON questionnaire.id=question.questionnaire_id
+		WHERE question.questionnaire_id = $1 AND question.revision=questionnaire.current_revision
+		ORDER BY position, question.id`, questionnaireID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -401,7 +411,9 @@ func (a *App) questionnaireLoadOwnAnswers(ctx context.Context, questionnaireID, 
 		SELECT o.id, o.question_id, o.label
 		FROM questionnaire_options o
 		JOIN questionnaire_questions q ON q.id = o.question_id
-		WHERE q.questionnaire_id = $1 ORDER BY q.position, o.position, o.id`, questionnaireID)
+		JOIN questionnaires questionnaire ON questionnaire.id=q.questionnaire_id
+		WHERE q.questionnaire_id = $1 AND q.revision=questionnaire.current_revision
+		ORDER BY q.position, o.position, o.id`, questionnaireID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -425,7 +437,8 @@ func (a *App) questionnaireLoadOwnAnswers(ctx context.Context, questionnaireID, 
 	status := "draft"
 	err = a.pool.QueryRow(ctx, `
 		SELECT id, status FROM questionnaire_responses
-		WHERE questionnaire_id = $1 AND user_id = $2`, questionnaireID, userID).Scan(&responseID, &status)
+		WHERE questionnaire_id = $1 AND revision=(SELECT current_revision FROM questionnaires WHERE id=$1)
+		  AND user_id = $2`, questionnaireID, userID).Scan(&responseID, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return questions, status, nil
 	}
@@ -483,7 +496,9 @@ func (a *App) questionnaireLoadMemberStatuses(ctx context.Context, questionnaire
 		SELECT u.username, COALESCE(r.status, 'draft')
 		FROM team_members tm
 		JOIN users u ON u.id = tm.user_id
-		LEFT JOIN questionnaire_responses r ON r.questionnaire_id = $1 AND r.user_id = tm.user_id
+		JOIN questionnaires questionnaire ON questionnaire.id=$1
+		LEFT JOIN questionnaire_responses r ON r.questionnaire_id = $1
+		  AND r.revision=questionnaire.current_revision AND r.user_id = tm.user_id
 		WHERE tm.team_id = $2
 		ORDER BY lower(u.username), u.id`, questionnaireID, teamID)
 	if err != nil {
@@ -548,6 +563,7 @@ func questionnaireValidateAutosave(ctx context.Context, tx pgx.Tx, questionnaire
 		SELECT id, type, required, text_limit, selection_limit
 		FROM questionnaire_questions
 		WHERE id = $1 AND questionnaire_id = $2
+		  AND revision=(SELECT current_revision FROM questionnaires WHERE id=$2)
 		FOR SHARE`, input.QuestionID, questionnaireID).Scan(&rule.ID, &rule.Type, &rule.Required, &textLimit, &selectionLimit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return rule, nil, &questionnaireValidationError{message: "Вопрос не относится к этой анкете."}
@@ -624,20 +640,22 @@ func questionnaireUniqueIDs(ids []int64) []int64 {
 
 func questionnaireLockResponse(ctx context.Context, tx pgx.Tx, questionnaireID, teamID, userID int64) (int64, string, error) {
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO questionnaire_responses (questionnaire_id, team_id_at_start, user_id)
-		VALUES ($1, $2, $3) ON CONFLICT (questionnaire_id, user_id) DO NOTHING`, questionnaireID, teamID, userID); err != nil {
+		INSERT INTO questionnaire_responses (questionnaire_id, revision, team_id_at_start, user_id)
+		SELECT id, current_revision, $2, $3 FROM questionnaires WHERE id=$1
+		ON CONFLICT (questionnaire_id, revision, user_id) DO NOTHING`, questionnaireID, teamID, userID); err != nil {
 		return 0, "", err
 	}
 	var responseID int64
 	var status string
 	err := tx.QueryRow(ctx, `
 		SELECT id, status FROM questionnaire_responses
-		WHERE questionnaire_id = $1 AND user_id = $2 FOR UPDATE`, questionnaireID, userID).Scan(&responseID, &status)
+		WHERE questionnaire_id = $1 AND revision=(SELECT current_revision FROM questionnaires WHERE id=$1)
+		  AND user_id = $2 FOR UPDATE`, questionnaireID, userID).Scan(&responseID, &status)
 	return responseID, status, err
 }
 
 func questionnaireValidateCompletion(ctx context.Context, tx pgx.Tx, questionnaireID, responseID int64) ([]byte, error) {
-	rules, textAnswers, selectedOptions, err := questionnaireLoadSnapshotParts(ctx, tx, questionnaireID, responseID)
+	rules, textAnswers, selectedOptions, selectedLabels, err := questionnaireLoadSnapshotParts(ctx, tx, questionnaireID, responseID)
 	if err != nil {
 		return nil, err
 	}
@@ -673,32 +691,36 @@ func questionnaireValidateCompletion(ctx context.Context, tx pgx.Tx, questionnai
 			return nil, fmt.Errorf("unknown questionnaire question type %q", rule.Type)
 		}
 	}
-	return questionnaireMarshalSnapshot(rules, textAnswers, selectedOptions)
+	return questionnaireMarshalSnapshot(rules, textAnswers, selectedOptions, selectedLabels)
 }
 
 func questionnaireBuildSnapshot(ctx context.Context, tx pgx.Tx, questionnaireID, responseID int64) ([]byte, error) {
-	rules, textAnswers, selectedOptions, err := questionnaireLoadSnapshotParts(ctx, tx, questionnaireID, responseID)
+	rules, textAnswers, selectedOptions, selectedLabels, err := questionnaireLoadSnapshotParts(ctx, tx, questionnaireID, responseID)
 	if err != nil {
 		return nil, err
 	}
-	return questionnaireMarshalSnapshot(rules, textAnswers, selectedOptions)
+	return questionnaireMarshalSnapshot(rules, textAnswers, selectedOptions, selectedLabels)
 }
 
-func questionnaireLoadSnapshotParts(ctx context.Context, tx pgx.Tx, questionnaireID, responseID int64) ([]questionnaireQuestionRule, map[int64]string, map[int64][]int64, error) {
+func questionnaireLoadSnapshotParts(ctx context.Context, tx pgx.Tx, questionnaireID, responseID int64) ([]questionnaireQuestionRule, map[int64]string, map[int64][]int64, map[int64][]string, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT id, type, required, text_limit, selection_limit
-		FROM questionnaire_questions WHERE questionnaire_id = $1 ORDER BY position, id FOR SHARE`, questionnaireID)
+		SELECT question.id, question.type, question.prompt, question.position,
+		       question.required, question.text_limit, question.selection_limit
+		FROM questionnaire_questions question
+		JOIN questionnaires questionnaire ON questionnaire.id=question.questionnaire_id
+		WHERE question.questionnaire_id = $1 AND question.revision=questionnaire.current_revision
+		ORDER BY position, question.id FOR SHARE OF question`, questionnaireID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	rules := make([]questionnaireQuestionRule, 0)
 	knownQuestions := make(map[int64]questionnaireQuestionRule)
 	for rows.Next() {
 		var rule questionnaireQuestionRule
 		var textLimit, selectionLimit *int
-		if err = rows.Scan(&rule.ID, &rule.Type, &rule.Required, &textLimit, &selectionLimit); err != nil {
+		if err = rows.Scan(&rule.ID, &rule.Type, &rule.Prompt, &rule.Position, &rule.Required, &textLimit, &selectionLimit); err != nil {
 			rows.Close()
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		if textLimit != nil {
 			rule.TextLimit = *textLimit
@@ -711,21 +733,21 @@ func questionnaireLoadSnapshotParts(ctx context.Context, tx pgx.Tx, questionnair
 	}
 	if err = rows.Err(); err != nil {
 		rows.Close()
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	rows.Close()
 
 	textAnswers := make(map[int64]string)
 	textRows, err := tx.Query(ctx, `SELECT question_id, value FROM questionnaire_text_answers WHERE response_id = $1`, responseID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	for textRows.Next() {
 		var questionID int64
 		var value string
 		if err = textRows.Scan(&questionID, &value); err != nil {
 			textRows.Close()
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		if _, exists := knownQuestions[questionID]; exists {
 			textAnswers[questionID] = value
@@ -733,48 +755,52 @@ func questionnaireLoadSnapshotParts(ctx context.Context, tx pgx.Tx, questionnair
 	}
 	if err = textRows.Err(); err != nil {
 		textRows.Close()
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	textRows.Close()
 
 	selectedOptions := make(map[int64][]int64)
+	selectedLabels := make(map[int64][]string)
 	optionRows, err := tx.Query(ctx, `
-		SELECT s.question_id, s.option_id, o.question_id
+		SELECT s.question_id, s.option_id, o.question_id, o.label
 		FROM questionnaire_selected_options s
 		JOIN questionnaire_options o ON o.id = s.option_id
 		WHERE s.response_id = $1 ORDER BY s.question_id, o.position, s.option_id`, responseID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	for optionRows.Next() {
 		var questionID, optionID, ownerQuestionID int64
-		if err = optionRows.Scan(&questionID, &optionID, &ownerQuestionID); err != nil {
+		var label string
+		if err = optionRows.Scan(&questionID, &optionID, &ownerQuestionID, &label); err != nil {
 			optionRows.Close()
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		if _, exists := knownQuestions[questionID]; !exists || ownerQuestionID != questionID {
 			optionRows.Close()
-			return nil, nil, nil, &questionnaireValidationError{message: "Один из выбранных вариантов больше не относится к вопросу."}
+			return nil, nil, nil, nil, &questionnaireValidationError{message: "Один из выбранных вариантов больше не относится к вопросу."}
 		}
 		selectedOptions[questionID] = append(selectedOptions[questionID], optionID)
+		selectedLabels[questionID] = append(selectedLabels[questionID], label)
 	}
 	if err = optionRows.Err(); err != nil {
 		optionRows.Close()
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	optionRows.Close()
-	return rules, textAnswers, selectedOptions, nil
+	return rules, textAnswers, selectedOptions, selectedLabels, nil
 }
 
-func questionnaireMarshalSnapshot(rules []questionnaireQuestionRule, textAnswers map[int64]string, selectedOptions map[int64][]int64) ([]byte, error) {
+func questionnaireMarshalSnapshot(rules []questionnaireQuestionRule, textAnswers map[int64]string, selectedOptions map[int64][]int64, selectedLabels map[int64][]string) ([]byte, error) {
 	snapshot := questionnaireSnapshot{Answers: make([]questionnaireSnapshotAnswer, 0, len(rules))}
 	for _, rule := range rules {
-		answer := questionnaireSnapshotAnswer{QuestionID: rule.ID, Type: rule.Type}
+		answer := questionnaireSnapshotAnswer{QuestionID: rule.ID, Type: rule.Type, Prompt: rule.Prompt, Position: rule.Position}
 		if text, exists := textAnswers[rule.ID]; exists {
 			answer.Text = &text
 		}
 		if options := selectedOptions[rule.ID]; len(options) > 0 {
 			answer.OptionIDs = options
+			answer.OptionLabels = selectedLabels[rule.ID]
 		}
 		snapshot.Answers = append(snapshot.Answers, answer)
 	}

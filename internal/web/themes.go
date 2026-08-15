@@ -442,7 +442,8 @@ func (a *App) teamThemeSelect(c *gin.Context) {
 		SELECT EXISTS (
 			SELECT 1 FROM team_members member
 			JOIN questionnaires q ON q.jam_id=member.jam_id
-			JOIN questionnaire_responses r ON r.questionnaire_id=q.id AND r.user_id=member.user_id AND r.status='completed'
+			JOIN questionnaire_responses r ON r.questionnaire_id=q.id AND r.revision=q.current_revision
+			  AND r.user_id=member.user_id AND r.status='completed'
 			WHERE member.team_id=$1
 		) OR COALESCE((SELECT allowed FROM team_eligibility_overrides WHERE team_id=$1), false)`, teamID).Scan(&eligible); err != nil {
 		a.themeSelectionFailure(c, teamID, err)
