@@ -41,7 +41,7 @@ func TestVoteConstraintsAndSelectionChange(t *testing.T) {
 	if err = pool.QueryRow(ctx, `
 		INSERT INTO nomination_votes (user_id, nomination_id, product_id, jam_id)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (user_id, nomination_id) DO UPDATE SET product_id=EXCLUDED.product_id, updated_at=clock_timestamp()
+		ON CONFLICT (user_id, nomination_id) WHERE invalidated_at IS NULL DO UPDATE SET product_id=EXCLUDED.product_id, updated_at=clock_timestamp()
 		RETURNING product_id`, fixture.voterID, fixture.nominationID, fixture.productBID, fixture.jamID).Scan(&selectedProductID); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestConcurrentVoteUpsertsLeaveOneSelection(t *testing.T) {
 			_, err := pool.Exec(ctx, `
 				INSERT INTO nomination_votes (user_id, nomination_id, product_id, jam_id)
 				VALUES ($1, $2, $3, $4)
-				ON CONFLICT (user_id, nomination_id) DO UPDATE SET
+				ON CONFLICT (user_id, nomination_id) WHERE invalidated_at IS NULL DO UPDATE SET
 				    product_id=EXCLUDED.product_id, updated_at=clock_timestamp()`,
 				fixture.voterID, fixture.nominationID, productID, fixture.jamID)
 			errorsChannel <- err

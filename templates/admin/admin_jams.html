@@ -9,7 +9,7 @@
   </style>
 </head>
 <body>
-<header><p class="stamp">Архив / управление</p><h1>Джемы</h1><p>Администратор: {{.User.Username}}</p><nav><a href="/admin/jams/new">Создать draft-джем</a> · <a href="/admin/teams">Команды</a> · <a href="/admin/users">Пользователи</a> · <a href="/admin/audit">Аудит</a></nav>{{if .Development}}<form method="post" action="/admin/demo"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Создать и опубликовать тестовый джем</button></form>{{end}}</header>
+<header><p class="stamp">Архив / управление</p><h1>Джемы</h1><p>Администратор: {{.User.Username}}</p><nav><a href="/admin">Dashboard</a> · <a href="/admin/jams/new">Создать draft-джем</a> · <a href="/admin/teams">Команды</a> · <a href="/admin/users">Пользователи</a> · <a href="/admin/audit">Аудит</a></nav>{{if .Development}}<form method="post" action="/admin/demo"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Создать и опубликовать тестовый джем</button></form>{{end}}</header>
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
 <section>
 {{if .Jams}}

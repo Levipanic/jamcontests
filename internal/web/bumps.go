@@ -50,7 +50,7 @@ func (a *App) productBumps(c *gin.Context) {
 	var stageValue string
 	err := a.pool.QueryRow(c.Request.Context(), `
 		SELECT COALESCE((
-		           SELECT SUM(bump.bump_count)::bigint
+			           SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint
 		           FROM product_bumps bump
 		           WHERE bump.product_id=product.id AND bump.jam_id=product.jam_id
 		       ), 0),
@@ -229,7 +229,7 @@ type bumpQueryer interface {
 func loadBumpState(ctx context.Context, queryer bumpQueryer, productID, jamID, userID int64) (bumpResponse, error) {
 	response := bumpResponse{}
 	err := queryer.QueryRow(ctx, `
-		SELECT COALESCE(SUM(bump_count), 0)::bigint,
+		SELECT COALESCE(SUM(bump_count-invalidated_count), 0)::bigint,
 		       COALESCE(GREATEST(0, CEIL(EXTRACT(EPOCH FROM (
 		           MAX(last_bumped_at) FILTER (WHERE user_id=$2) + interval '1 minute' - clock_timestamp()
 		       ))))::integer, 0)
@@ -240,7 +240,7 @@ func loadBumpState(ctx context.Context, queryer bumpQueryer, productID, jamID, u
 func loadDisclosedBumpState(ctx context.Context, queryer bumpQueryer, productID, userID int64) (bumpResponse, error) {
 	response := bumpResponse{}
 	err := queryer.QueryRow(ctx, `
-		SELECT COALESCE((SELECT SUM(bump_count)::bigint FROM product_bumps WHERE product_id=product.id), 0),
+		SELECT COALESCE((SELECT SUM(bump_count-invalidated_count)::bigint FROM product_bumps WHERE product_id=product.id), 0),
 		       COALESCE(GREATEST(0, CEIL(EXTRACT(EPOCH FROM (
 		           own_bump.last_bumped_at + interval '1 minute' - clock_timestamp()
 		       ))))::integer, 0),

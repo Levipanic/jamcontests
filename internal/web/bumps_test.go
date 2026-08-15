@@ -77,7 +77,7 @@ func TestPublicProductQueriesAggregateBumpsWithoutBumpOrdering(t *testing.T) {
 	}
 	source := string(body)
 	for _, required := range []string{
-		"SELECT SUM(bump.bump_count)::bigint",
+		"SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint",
 		"jam.status_override IN ('evaluation', 'voting', 'finished')",
 		"ORDER BY p.finalized_at, p.id",
 	} {

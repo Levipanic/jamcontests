@@ -114,6 +114,7 @@ func New(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) *gin.Engine
 	app.registerNominationRoutes(router)
 	app.registerVotingRoutes(router)
 	app.registerBumpRoutes(router)
+	app.registerAdminInterventionRoutes(router)
 
 	return router
 }

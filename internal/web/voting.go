@@ -137,7 +137,7 @@ func (a *App) vote(c *gin.Context) {
 	err = tx.QueryRow(ctx, `
 		INSERT INTO nomination_votes (user_id, nomination_id, product_id, jam_id)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (user_id, nomination_id) DO UPDATE SET
+		ON CONFLICT (user_id, nomination_id) WHERE invalidated_at IS NULL DO UPDATE SET
 		    product_id=EXCLUDED.product_id,
 		    updated_at=clock_timestamp()
 		RETURNING nomination_id, product_id`, CurrentUser(c).ID, nominationID, request.ProductID, jamID).Scan(&response.NominationID, &response.SelectedProductID)
@@ -204,6 +204,7 @@ func (a *App) voteCounts(c *gin.Context) {
 		CROSS JOIN public_products product
 		LEFT JOIN nomination_votes vote
 		  ON vote.jam_id=$1 AND vote.nomination_id=nomination.id AND vote.product_id=product.id
+		 AND vote.invalidated_at IS NULL
 		GROUP BY nomination.id, product.id
 		ORDER BY nomination.id, product.id`, jamID)
 	if err != nil {

@@ -7,7 +7,7 @@
     body{max-width:58rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}main,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}label{display:block;margin:.8rem 0}input,textarea,select{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}textarea{min-height:6rem}button{padding:.55rem .9rem}.actions{display:flex;gap:.75rem;flex-wrap:wrap}.danger{border:2px solid #8d1111}.error{color:#8d1111;font-weight:bold}.meta{font-family:"Cutive Mono","Courier New",monospace}fieldset{margin-top:1rem}
   </style>
 </head>
-<body><p><a href="/admin">← К списку джемов</a></p><main>
+<body><p><a href="/admin/jams">← К списку джемов</a></p><main>
 <h1>{{if .Jam}}Редактирование: {{.Jam.Title}}{{else}}Новый draft-джем{{end}}</h1>
 {{if not .Jam}}<p>После создания добавьте хотя бы один вопрос анкеты, затем вернитесь сюда и опубликуйте джем.</p>{{end}}
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}

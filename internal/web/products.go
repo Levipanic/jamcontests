@@ -326,7 +326,7 @@ func (a *App) productsList(c *gin.Context) {
 	rows, err := a.pool.Query(c.Request.Context(), `
 		SELECT p.id, p.title, p.result_url, p.description, COALESCE(p.commentary_url, ''),
 		       team.id, team.name, theme.phrase,
-		       COALESCE((SELECT SUM(bump.bump_count)::bigint FROM product_bumps bump
+		       COALESCE((SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint FROM product_bumps bump
 		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0)
 		FROM products p
 		JOIN jams jam ON jam.id=p.jam_id AND jam.visibility='published'
@@ -374,7 +374,7 @@ func (a *App) productDetail(c *gin.Context) {
 	err := a.pool.QueryRow(c.Request.Context(), `
 		SELECT p.id, p.jam_id, jam.title, p.title, p.result_url, p.description,
 		       COALESCE(p.commentary_url, ''), team.id, team.name, theme.phrase,
-		       COALESCE((SELECT SUM(bump.bump_count)::bigint FROM product_bumps bump
+		       COALESCE((SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint FROM product_bumps bump
 		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0),
 		       jam.submission_starts_at, jam.evaluation_starts_at, jam.voting_starts_at,
 		       jam.finishes_at, jam.status_override

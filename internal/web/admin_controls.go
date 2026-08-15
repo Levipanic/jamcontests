@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,12 +18,14 @@ import (
 const adminRoleLock int64 = 0x41444d49
 
 type adminControlPageData struct {
-	User      *User
-	CSRFToken string
-	Error     string
-	Users     []adminControlUser
-	Teams     []adminControlTeam
-	Audit     []adminControlAudit
+	User       *User
+	CSRFToken  string
+	Error      string
+	Users      []adminControlUser
+	Teams      []adminControlTeam
+	Audit      []adminControlAudit
+	Search     string
+	UserDetail *adminControlUserDetail
 }
 
 type adminControlUser struct {
@@ -30,6 +33,22 @@ type adminControlUser struct {
 	Username string
 	Email    *string
 	Role     string
+}
+
+type adminControlUserMembership struct {
+	JamID         int64
+	JamTitle      string
+	TeamID        int64
+	TeamName      string
+	Captain       bool
+	ProductEditor bool
+}
+
+type adminControlUserDetail struct {
+	adminControlUser
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Memberships []adminControlUserMembership
 }
 
 type adminControlAudit struct {
@@ -81,6 +100,7 @@ func (a *App) registerAdminControlRoutes(router *gin.Engine) {
 	admin := router.Group("/admin", RequireAdmin())
 	admin.GET("/audit", a.adminControlAuditPage)
 	admin.GET("/users", a.adminControlUsersPage)
+	admin.GET("/users/:id", a.adminControlUserDetailPage)
 	admin.POST("/users/:id/role", a.adminControlUserRole)
 	admin.GET("/teams", a.adminControlTeamsPage)
 	admin.POST("/teams/:id/profile", a.adminControlTeamProfile)
@@ -122,7 +142,20 @@ func (a *App) adminControlAuditPage(c *gin.Context) {
 }
 
 func (a *App) adminControlUsersPage(c *gin.Context) {
-	rows, err := a.pool.Query(c.Request.Context(), `SELECT id, username, email, role FROM users ORDER BY lower(username), id`)
+	search := strings.TrimSpace(c.Query("q"))
+	if len(search) > 254 {
+		a.adminControlRender(c, http.StatusBadRequest, "admin_users.html", adminControlPageData{Error: "Поисковый запрос слишком длинный.", Search: search})
+		return
+	}
+	var exactID int64
+	if parsed, parseErr := strconv.ParseInt(search, 10, 64); parseErr == nil && parsed > 0 {
+		exactID = parsed
+	}
+	rows, err := a.pool.Query(c.Request.Context(), `
+		SELECT id, username, email, role FROM users
+		WHERE $1='' OR strpos(lower(username), lower($1))>0
+		   OR strpos(lower(COALESCE(email, '')), lower($1))>0 OR id=$2
+		ORDER BY lower(username), id`, search, exactID)
 	if err != nil {
 		a.adminControlRender(c, http.StatusInternalServerError, "admin_users.html", adminControlPageData{Error: "Не удалось загрузить пользователей."})
 		return
@@ -143,7 +176,42 @@ func (a *App) adminControlUsersPage(c *gin.Context) {
 		a.adminControlRender(c, http.StatusInternalServerError, "admin_users.html", adminControlPageData{Error: "Не удалось загрузить пользователей."})
 		return
 	}
-	a.adminControlRender(c, http.StatusOK, "admin_users.html", adminControlPageData{Users: users, Error: c.Query("error")})
+	a.adminControlRender(c, http.StatusOK, "admin_users.html", adminControlPageData{Users: users, Error: c.Query("error"), Search: search})
+}
+
+func (a *App) adminControlUserDetailPage(c *gin.Context) {
+	userID, ok := adminID(c, "id")
+	if !ok {
+		return
+	}
+	var detail adminControlUserDetail
+	err := a.pool.QueryRow(c.Request.Context(), `SELECT id, username, email, role, created_at, updated_at FROM users WHERE id=$1`, userID).Scan(&detail.ID, &detail.Username, &detail.Email, &detail.Role, &detail.CreatedAt, &detail.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		a.adminControlRender(c, http.StatusInternalServerError, "admin_user_detail.html", adminControlPageData{Error: "Не удалось загрузить пользователя."})
+		return
+	}
+	rows, err := a.pool.Query(c.Request.Context(), `
+		SELECT jam.id, jam.title, team.id, team.name, team.captain_user_id=member.user_id, member.is_product_editor
+		FROM team_members member JOIN teams team ON team.id=member.team_id AND team.jam_id=member.jam_id
+		JOIN jams jam ON jam.id=member.jam_id WHERE member.user_id=$1 ORDER BY jam.created_at DESC`, userID)
+	if err != nil {
+		a.adminControlRender(c, http.StatusInternalServerError, "admin_user_detail.html", adminControlPageData{Error: "Не удалось загрузить членство."})
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var membership adminControlUserMembership
+		if err = rows.Scan(&membership.JamID, &membership.JamTitle, &membership.TeamID, &membership.TeamName, &membership.Captain, &membership.ProductEditor); err != nil {
+			a.adminControlRender(c, http.StatusInternalServerError, "admin_user_detail.html", adminControlPageData{Error: "Не удалось загрузить членство."})
+			return
+		}
+		detail.Memberships = append(detail.Memberships, membership)
+	}
+	a.adminControlRender(c, http.StatusOK, "admin_user_detail.html", adminControlPageData{UserDetail: &detail, Error: c.Query("error")})
 }
 
 func (a *App) adminControlUserRole(c *gin.Context) {
@@ -159,6 +227,10 @@ func (a *App) adminControlUserRole(c *gin.Context) {
 	reason, err := validateReason(c.PostForm("reason"))
 	if err != nil {
 		a.adminControlRedirect(c, "/admin/users", err.Error())
+		return
+	}
+	if c.PostForm("confirm") != "change_role" {
+		a.adminControlRedirect(c, "/admin/users", "Подтвердите изменение роли.")
 		return
 	}
 	ctx := c.Request.Context()
@@ -192,18 +264,18 @@ func (a *App) adminControlUserRole(c *gin.Context) {
 			return
 		}
 	}
+	before := map[string]any{"id": userID, "username": username, "role": beforeRole}
+	after := map[string]any{"id": userID, "username": username, "role": role}
+	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "user.role_update", "user", userID, reason, before, after); err != nil {
+		a.adminControlFailure(c, "/admin/users", "audit user role update", err)
+		return
+	}
 	if _, err = tx.Exec(ctx, `UPDATE users SET role=$1, updated_at=now() WHERE id=$2`, role, userID); err != nil {
 		a.adminControlFailure(c, "/admin/users", "update user role", err)
 		return
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
 		a.adminControlFailure(c, "/admin/users", "revoke sessions after role update", err)
-		return
-	}
-	before := map[string]any{"id": userID, "username": username, "role": beforeRole}
-	after := map[string]any{"id": userID, "username": username, "role": role}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "user.role_update", "user", userID, reason, before, after); err != nil {
-		a.adminControlFailure(c, "/admin/users", "audit user role update", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {

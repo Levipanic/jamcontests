@@ -74,6 +74,7 @@ func (a *App) registerNominationRoutes(router *gin.Engine) {
 	admin.POST("/jams/:id/nominations", a.adminNominationCreate)
 	admin.POST("/jams/:id/nominations/:nominationID/edit", a.adminNominationEdit)
 	admin.POST("/jams/:id/nominations/:nominationID/withdraw", a.adminNominationWithdraw)
+	admin.POST("/jams/:id/nominations/:nominationID/moderate", a.adminNominationModerate)
 
 	router.GET("/jams/:id/nominations", a.nominationsList)
 }
@@ -204,7 +205,7 @@ func (a *App) populateFinishedResults(ctx context.Context, jamID int64, nominati
 			JOIN public_nominations nomination ON nomination.id=vote.nomination_id
 			JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
 			  AND product.status='final'
-			WHERE vote.jam_id=$1
+			WHERE vote.jam_id=$1 AND vote.invalidated_at IS NULL
 			GROUP BY vote.nomination_id, vote.product_id
 		), maxima AS (
 			SELECT nomination_id, max(vote_count) AS max_count, sum(vote_count)::bigint AS total_votes
@@ -297,7 +298,8 @@ func (a *App) populateVotingProducts(ctx context.Context, jamID int64, user *Use
 		JOIN nominations nomination ON nomination.id=vote.nomination_id AND nomination.jam_id=vote.jam_id
 		JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
 		JOIN jams jam ON jam.id=vote.jam_id AND jam.visibility='published'
-		WHERE vote.jam_id=$1 AND nomination.withdrawn_at IS NULL AND product.status='final'
+		WHERE vote.jam_id=$1 AND vote.invalidated_at IS NULL
+		  AND nomination.withdrawn_at IS NULL AND product.status='final'
 		  AND (nomination.kind='curator' OR EXISTS (
 		      SELECT 1 FROM products author_product
 		      WHERE author_product.id=nomination.product_id AND author_product.jam_id=nomination.jam_id
@@ -437,6 +439,83 @@ func (a *App) adminNominationWithdraw(c *gin.Context) {
 		return
 	}
 	a.mutateCuratorNomination(c, jamID, nominationID, "", reason, true)
+}
+
+func (a *App) adminNominationModerate(c *gin.Context) {
+	jamID, nominationID, ok := adminNominationIDs(c)
+	if !ok {
+		return
+	}
+	title := normalizeNominationTitle(c.PostForm("title"))
+	if err := validateNominationTitle(title, false); err != nil {
+		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	reason, err := validateReason(c.PostForm("reason"))
+	if err != nil {
+		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	state := strings.TrimSpace(c.PostForm("state"))
+	if state != "active" && state != "withdrawn" {
+		a.renderAdminNominations(c, jamID, "Выберите допустимое состояние.", http.StatusUnprocessableEntity)
+		return
+	}
+	if c.PostForm("confirm") != "moderate" {
+		a.renderAdminNominations(c, jamID, "Подтвердите административное вмешательство.", http.StatusUnprocessableEntity)
+		return
+	}
+	ctx := c.Request.Context()
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		a.adminNominationFailure(c, "begin nomination moderation", err)
+		return
+	}
+	defer tx.Rollback(ctx)
+	if _, err = lockNominationJam(ctx, tx, jamID); err != nil {
+		a.handleAdminNominationLoadError(c, err)
+		return
+	}
+	var kind, beforeTitle string
+	var authorTeamID, productID *int64
+	var beforeWithdrawn bool
+	err = tx.QueryRow(ctx, `SELECT kind, title, author_team_id, product_id, withdrawn_at IS NOT NULL FROM nominations WHERE id=$1 AND jam_id=$2 FOR UPDATE`, nominationID, jamID).Scan(&kind, &beforeTitle, &authorTeamID, &productID, &beforeWithdrawn)
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		a.adminNominationFailure(c, "lock nomination moderation", err)
+		return
+	}
+	authorID, productValue := int64(0), int64(0)
+	if authorTeamID != nil {
+		authorID = *authorTeamID
+	}
+	if productID != nil {
+		productValue = *productID
+	}
+	afterWithdrawn := state == "withdrawn"
+	if beforeTitle == title && beforeWithdrawn == afterWithdrawn {
+		a.renderAdminNominations(c, jamID, "Номинация не изменилась.", http.StatusConflict)
+		return
+	}
+	before := nominationAuditData(nominationID, jamID, kind, beforeTitle, authorID, productValue, beforeWithdrawn)
+	_, err = tx.Exec(ctx, `UPDATE nominations SET title=$2, withdrawn_at=CASE WHEN $3 THEN COALESCE(withdrawn_at, clock_timestamp()) ELSE NULL END, updated_at=now() WHERE id=$1`, nominationID, title, afterWithdrawn)
+	if err != nil {
+		a.adminNominationFailure(c, "moderate nomination", err)
+		return
+	}
+	after := nominationAuditData(nominationID, jamID, kind, title, authorID, productValue, afterWithdrawn)
+	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "nomination.moderate", "nomination", nominationID, reason, before, after); err != nil {
+		a.adminNominationFailure(c, "audit nomination moderation", err)
+		return
+	}
+	if err = tx.Commit(ctx); err != nil {
+		a.adminNominationFailure(c, "commit nomination moderation", err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/nominations", jamID))
 }
 
 func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64, title, reason string, withdraw bool) {

@@ -46,7 +46,7 @@ func TestVoteMutationUsesDatabaseRules(t *testing.T) {
 	}
 	source := string(body)
 	for _, required := range []string{
-		"ON CONFLICT (user_id, nomination_id) DO UPDATE",
+		"ON CONFLICT (user_id, nomination_id) WHERE invalidated_at IS NULL DO UPDATE",
 		"RETURNING nomination_id, product_id",
 		"nomination.withdrawn_at IS NULL",
 		"product.status='final'",

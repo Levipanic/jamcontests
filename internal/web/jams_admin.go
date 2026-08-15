@@ -95,7 +95,8 @@ type jamAdminPageData struct {
 // must invoke it while constructing the application's Gin router.
 func (a *App) registerJamAdminRoutes(router *gin.Engine) {
 	admin := router.Group("/admin", RequireAdmin())
-	admin.GET("", a.jamAdminDashboard)
+	admin.GET("", a.adminDashboard)
+	admin.GET("/jams", a.jamAdminDashboard)
 	admin.POST("/demo", a.createDemoJamAdmin)
 	admin.GET("/jams/new", a.newJamAdminPage)
 	admin.POST("/jams/new", a.createJamAdmin)

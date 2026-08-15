@@ -116,6 +116,7 @@ func TestPageTemplatesExecute(t *testing.T) {
 		data any
 	}{
 		{"admin_jams.html", jamAdminPageData{PageData: PageData{User: user, CSRFToken: "token"}}},
+		{"admin_dashboard.html", adminDashboardData{User: user, CSRFToken: "token"}},
 		{"admin_jam_form.html", jamAdminPageData{PageData: PageData{User: user, CSRFToken: "token"}}},
 		{"admin_questionnaire.html", jamAdminPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
 		{"admin_questionnaire_reports.html", adminQuestionnaireReportsData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
@@ -123,7 +124,10 @@ func TestPageTemplatesExecute(t *testing.T) {
 		{"admin_themes.html", adminThemesPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
 		{"admin_products.html", adminProductsPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}, Products: []ProductView{{ID: 1, TeamID: 1, TeamName: "Team", Status: "draft"}}}},
 		{"admin_nominations.html", adminNominationsPageData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
+		{"admin_votes.html", adminInterventionData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
+		{"admin_bumps.html", adminInterventionData{PageData: PageData{User: user, CSRFToken: "token"}, Jam: &adminJam{ID: 1, Title: "Jam"}}},
 		{"admin_users.html", adminControlPageData{User: user, CSRFToken: "token"}},
+		{"admin_user_detail.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"admin_teams.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"admin_audit.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"team_new.html", teamPageView{User: user, CSRFToken: "token", JamID: 1}},
