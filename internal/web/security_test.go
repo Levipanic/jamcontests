@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +41,40 @@ func TestCSRFTokenSignature(t *testing.T) {
 	}
 	if app.validCSRFSignature(token + "x") {
 		t.Fatal("tampered token validated")
+	}
+}
+
+func TestAvatarLookupRequiresPublishedJamForNonAdmin(t *testing.T) {
+	source, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, required := range []string{
+		"JOIN jams j ON j.id = t.jam_id",
+		"j.visibility = 'published' OR $2",
+		"name, isAdmin",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("avatar lookup is missing %q", required)
+		}
+	}
+}
+
+func TestCreateAdminSerializesBootstrapAndRevokesSessions(t *testing.T) {
+	source, err := os.ReadFile("admin_cli.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, required := range []string{
+		"pg_advisory_xact_lock($1)",
+		"adminRoleLock",
+		"DELETE FROM sessions WHERE user_id = $1",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("admin bootstrap is missing %q", required)
+		}
 	}
 }
 

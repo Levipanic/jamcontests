@@ -27,6 +27,9 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, username, rawEmail, pa
 		return fmt.Errorf("начать транзакцию: %w", err)
 	}
 	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, adminRoleLock); err != nil {
+		return fmt.Errorf("заблокировать роли администраторов: %w", err)
+	}
 	var adminCount int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM users WHERE role='admin'`).Scan(&adminCount); err != nil {
 		return fmt.Errorf("проверить существующих администраторов: %w", err)
@@ -48,6 +51,9 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, username, rawEmail, pa
 		}
 		if _, err := tx.Exec(ctx, `UPDATE users SET role = 'admin', updated_at = now() WHERE id = $1`, userID); err != nil {
 			return fmt.Errorf("назначить администратора: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID); err != nil {
+			return fmt.Errorf("отозвать сессии после назначения: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO admin_audit_log (admin_user_id, action, entity_type, entity_id, reason, before_data, after_data)

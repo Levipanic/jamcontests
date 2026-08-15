@@ -50,6 +50,16 @@ go build ./...
 go vet ./...
 ```
 
+PostgreSQL-интеграционные тесты используют отдельную случайную схему и пропускаются, если `TEST_DATABASE_URL` не задан. Для запуска с локальной БД из Compose:
+
+```powershell
+$env:TEST_DATABASE_URL = 'postgres://jamcontests:jamcontests@localhost:5432/jamcontests?sslmode=disable'
+go test ./...
+Remove-Item Env:TEST_DATABASE_URL
+```
+
+Указанная роль должна иметь право создавать и удалять схемы. Каждый тест применяет актуальные миграции в собственной схеме и удаляет её после завершения.
+
 Загруженные аватары сохраняются в `storage/avatars` и не попадают в Git. В production этот каталог и PostgreSQL должны входить в резервное копирование.
 
 В production задайте отдельный `MIGRATION_DATABASE_URL` для роли-владельца схемы. Runtime-роль из `DATABASE_URL` должна иметь только необходимые приложению права; для `admin_audit_log` ей нужны `SELECT` и `INSERT`, но не `UPDATE`, `DELETE`, `TRUNCATE` или владение таблицей. Миграция дополнительно блокирует эти изменения триггерами.

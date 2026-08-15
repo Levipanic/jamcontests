@@ -191,8 +191,17 @@ func (a *App) avatar(c *gin.Context) {
 		return
 	}
 	path := filepath.Join(a.config.AvatarDir, name)
+	user := CurrentUser(c)
+	isAdmin := user != nil && user.Role == "admin"
 	var referenced bool
-	if err := a.pool.QueryRow(c.Request.Context(), `SELECT EXISTS (SELECT 1 FROM teams WHERE avatar_path=$1)`, name).Scan(&referenced); err != nil {
+	if err := a.pool.QueryRow(c.Request.Context(), `
+		SELECT EXISTS (
+			SELECT 1
+			FROM teams t
+			JOIN jams j ON j.id = t.jam_id
+			WHERE t.avatar_path = $1
+			  AND (j.visibility = 'published' OR $2)
+		)`, name, isAdmin).Scan(&referenced); err != nil {
 		a.logger.Error("check avatar reference", "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
