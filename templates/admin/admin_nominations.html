@@ -1,17 +1,22 @@
-{{define "admin_nominations.html"}}<!doctype html>
-<html lang="ru"><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Номинации · {{.Jam.Title}}</title><link rel="stylesheet" href="/static/css/font.css">
-  <style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}main,section,article{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}label{display:block;margin:.8rem 0}input{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}button{padding:.55rem .9rem}.error,.withdrawn{color:#8d1111;font-weight:bold}.danger{border:2px solid #8d1111}.meta{color:#625b52}</style>
-</head><body><p><a href="/admin/jams/{{.Jam.ID}}/edit">← К джему</a></p><main>
-  <p class="meta">Джем № {{.Jam.ID}} · effective stage: {{.Jam.Stage}}</p><h1>Номинации · {{.Jam.Title}}</h1>
-  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-  {{if .Mutable}}<section><h2>Новая кураторская номинация</h2><form method="post" action="/admin/jams/{{.Jam.ID}}/nominations"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Название <input name="title" maxlength="160" required></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Создать</button></form></section>{{else}}<p class="error">Изменения закрыты с начала голосования.</p>{{end}}
-  {{if .Nominations}}{{range .Nominations}}<article>
-    <p class="meta">Номинация № {{.ID}} · {{.Kind}}{{if .Withdrawn}} · <span class="withdrawn">отозвана</span>{{end}}</p><h2>{{.Title}}</h2>
-    {{if eq .Kind "team"}}<p>Команда: {{.AuthorTeamName}} (# {{.AuthorTeamID}})<br>Продукт: {{.ProductTitle}} (# {{.ProductID}})</p><p class="meta">Командная номинация доступна здесь только для просмотра.</p>{{end}}
-    <form class="danger" method="post" action="/admin/jams/{{$.Jam.ID}}/nominations/{{.ID}}/moderate"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Название <input name="title" value="{{.Title}}" maxlength="160" required></label><label>Состояние <select name="state"><option value="active"{{if not .Withdrawn}} selected{{end}}>active</option><option value="withdrawn"{{if .Withdrawn}} selected{{end}}>withdrawn</option></select></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><label><input type="checkbox" name="confirm" value="moderate" required> Подтверждаю вмешательство, включая возможное изменение раскрытого результата</label><button type="submit">Применить модерацию</button></form>
-    {{if and $.Mutable (eq .Kind "curator") (not .Withdrawn)}}<form method="post" action="/admin/jams/{{$.Jam.ID}}/nominations/{{.ID}}/edit"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Название <input name="title" value="{{.Title}}" maxlength="160" required></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Сохранить</button></form>
-    <form class="danger" method="post" action="/admin/jams/{{$.Jam.ID}}/nominations/{{.ID}}/withdraw"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><label><input type="checkbox" name="confirm" value="withdraw" required> Подтверждаю отзыв</label><button type="submit">Отозвать</button></form>{{end}}
-  </article>{{end}}{{else}}<p>Номинаций пока нет.</p>{{end}}
-</main></body></html>{{end}}
+{{define "admin_nominations.html"}}
+{{template "admin_head" .}}<title>Номинации | {{.Jam.Title}}</title>
+</head>
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_jam_panel" .}}
+{{template "admin_alerts" .}}
+<p class="admin-meta">Effective stage: {{rusStage .Jam.Stage}}</p>
+{{if .Mutable}}<section class="admin-section"><h2>Новая кураторская номинация</h2><form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/nominations"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Название <input name="title" maxlength="160" required></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Создать</button></form></section>{{else}}<p class="admin-warning">Изменения закрыты с начала голосования.</p>{{end}}
+<section class="admin-section"><h2>Номинации</h2>
+{{if .Nominations}}{{range .Nominations}}<article class="admin-card">
+<p class="admin-meta">Номинация № {{.ID}} · {{.Kind}}{{if .Withdrawn}} · <span class="admin-danger-text">отозвана</span>{{end}}</p><h3>{{.Title}}</h3>
+{{if eq .Kind "team"}}<p>Команда: {{.AuthorTeamName}} (#{{.AuthorTeamID}})<br>Продукт: {{.ProductTitle}} (#{{.ProductID}})</p><p class="admin-meta">Командная номинация доступна здесь только для просмотра.</p>{{end}}
+<form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{$.Jam.ID}}/nominations/{{.ID}}/moderate"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Название <input name="title" value="{{.Title}}" maxlength="160" required></label><label>Состояние <select name="state"><option value="active"{{if not .Withdrawn}} selected{{end}}>active</option><option value="withdrawn"{{if .Withdrawn}} selected{{end}}>withdrawn</option></select></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><label class="admin-check"><input type="checkbox" name="confirm" value="moderate" required> Подтверждаю вмешательство, включая возможное изменение раскрытого результата</label><button class="admin-danger" type="submit">Применить модерацию</button></form>
+{{if and $.Mutable (eq .Kind "curator") (not .Withdrawn)}}<form class="admin-form" method="post" action="/admin/jams/{{$.Jam.ID}}/nominations/{{.ID}}/edit"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Название <input name="title" value="{{.Title}}" maxlength="160" required></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Сохранить</button></form>
+<form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{$.Jam.ID}}/nominations/{{.ID}}/withdraw"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><label class="admin-check"><input type="checkbox" name="confirm" value="withdraw" required> Подтверждаю отзыв</label><button class="admin-danger" type="submit">Отозвать</button></form>{{end}}
+</article>{{end}}{{else}}<p>Номинаций пока нет.</p>{{end}}
+</section>
+</main>
+{{template "admin_footer" .}}
+{{end}}

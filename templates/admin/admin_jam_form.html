@@ -1,23 +1,21 @@
-{{define "admin_jam_form.html"}}<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{if .Jam}}Редактирование джема{{else}}Новый джем{{end}}</title><link rel="stylesheet" href="/static/css/font.css">
-  <style>
-    body{max-width:58rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}main,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}label{display:block;margin:.8rem 0}input,textarea,select{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}textarea{min-height:6rem}button{padding:.55rem .9rem}.actions{display:flex;gap:.75rem;flex-wrap:wrap}.danger{border:2px solid #8d1111}.error{color:#8d1111;font-weight:bold}.meta{font-family:"Cutive Mono","Courier New",monospace}fieldset{margin-top:1rem}
-  </style>
+{{define "admin_jam_form.html"}}
+{{template "admin_head" .}}<title>{{if .Jam}}Редактирование джема{{else}}Новый джем{{end}} | Администрирование</title>
 </head>
-<body><p><a href="/admin/jams">← К списку джемов</a></p><main>
-<h1>{{if .Jam}}Редактирование: {{.Jam.Title}}{{else}}Новый draft-джем{{end}}</h1>
-{{if not .Jam}}<p>После создания добавьте хотя бы один вопрос анкеты, затем вернитесь сюда и опубликуйте джем.</p>{{end}}
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-{{if .Jam}}<p class="meta">ID {{.Jam.ID}} · {{.Jam.Visibility}} · effective stage: {{.Jam.Stage}} · вопросов: {{.Jam.QuestionCount}}</p>{{end}}
-<form method="post" action="{{if .Jam}}/admin/jams/{{.Jam.ID}}/edit{{else}}/admin/jams/new{{end}}">
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_alerts" .}}
+{{if .Jam}}{{template "admin_jam_panel" .}}{{end}}
+<section class="admin-section"><h2>{{if .Jam}}Редактирование: {{.Jam.Title}}{{else}}Новый draft-джем{{end}}</h2>
+{{if not .Jam}}<p class="admin-help">После создания добавьте хотя бы один вопрос анкеты, затем вернитесь сюда и опубликуйте джем.</p>{{end}}
+{{if .Jam}}<p class="admin-meta">ID {{.Jam.ID}} · {{.Jam.Visibility}} · effective stage: {{rusStage .Jam.Stage}} · вопросов: {{.Jam.QuestionCount}} · тем: {{.Jam.ThemeCount}}</p>{{end}}
+<form class="admin-form" method="post" action="{{if .Jam}}/admin/jams/{{.Jam.ID}}/edit{{else}}/admin/jams/new{{end}}">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 <label>Название <input name="title" maxlength="160" required value="{{.JamForm.Title}}"></label>
 <label>Описание <textarea name="description" maxlength="10000">{{.JamForm.Description}}</textarea></label>
 <label>Правила <textarea name="rules" maxlength="20000">{{.JamForm.Rules}}</textarea></label>
-<fieldset><legend>Расписание, Europe/Moscow</legend>
+<fieldset class="admin-fieldset"><legend>Расписание, Europe/Moscow</legend>
+<p class="admin-help">Время задаётся и отображается в Europe/Moscow. Хранится как абсолютный момент времени (timestamptz).</p>
 <label>Начало submission <input type="datetime-local" name="submission_starts_at" required value="{{.JamForm.SubmissionStarts}}"></label>
 <label>Начало evaluation <input type="datetime-local" name="evaluation_starts_at" required value="{{.JamForm.EvaluationStarts}}"></label>
 <label>Начало voting <input type="datetime-local" name="voting_starts_at" required value="{{.JamForm.VotingStarts}}"></label>
@@ -27,17 +25,31 @@
 <label>Причина изменения <textarea name="reason" minlength="3" maxlength="1000" required>{{.JamForm.Reason}}</textarea></label>
 <button type="submit">{{if .Jam}}Сохранить изменения{{else}}Создать джем{{end}}</button>
 </form>
-</main>
+{{if .Jam}}<div class="admin-checklist"><h3>Готовность к публикации</h3>
+<ul>
+<li>{{if gt .Jam.QuestionCount 0}}<span class="admin-ok">✓</span>{{else}}<span class="admin-issue">✗</span>{{end}} Анкета содержит хотя бы один вопрос (сейчас {{.Jam.QuestionCount}})</li>
+<li>{{if gt .Jam.ThemeCount 0}}<span class="admin-ok">✓</span>{{else}}<span class="admin-issue">✗</span>{{end}} Активных тем хотя бы одна (сейчас {{.Jam.ThemeCount}})</li>
+</ul></div>{{end}}
+</section>
 {{if .Jam}}
-<section><h2>Материалы</h2><p><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Открыть конструктор вопросов</a></p><p><a href="/admin/jams/{{.Jam.ID}}/themes">Управлять темами</a></p><p><a href="/admin/jams/{{.Jam.ID}}/products">Модерировать продукты</a></p><p><a href="/admin/jams/{{.Jam.ID}}/nominations">Управлять номинациями</a></p></section>
-<section class="danger"><h2>Видимость и стадия</h2><p>Все действия требуют отдельного обоснования. Hard delete отсутствует.</p>
+<section class="admin-section"><h2>Материалы</h2><ul class="admin-list">
+<li><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Открыть конструктор вопросов</a></li>
+<li><a href="/admin/jams/{{.Jam.ID}}/themes">Управлять темами</a></li>
+<li><a href="/admin/jams/{{.Jam.ID}}/products">Модерировать продукты</a></li>
+<li><a href="/admin/jams/{{.Jam.ID}}/nominations">Управлять номинациями</a></li>
+<li><a href="/admin/jams/{{.Jam.ID}}/votes">Голоса</a></li>
+<li><a href="/admin/jams/{{.Jam.ID}}/bumps">Бампы</a></li>
+</ul></section>
+<section class="admin-section admin-danger-block"><h2>Видимость и стадия</h2><p class="admin-help">Все действия требуют отдельного обоснования и попадают в аудит. Hard delete отсутствует.</p>
 {{if eq .Jam.Visibility "draft"}}
-<form method="post" action="/admin/jams/{{.Jam.ID}}/publish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Опубликовать</button></form>
+<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/publish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Опубликовать</button></form>
 {{else}}
-<form method="post" action="/admin/jams/{{.Jam.ID}}/unpublish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина снятия с публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Снять с публикации</button></form>
+<form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{.Jam.ID}}/unpublish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина снятия с публикации <input name="reason" minlength="3" maxlength="1000" required></label><button class="admin-danger" type="submit">Снять с публикации</button></form>
 {{end}}
-<form method="post" action="/admin/jams/{{.Jam.ID}}/override"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Явная стадия <select name="stage" required><option value="upcoming">upcoming</option><option value="submission">submission</option><option value="evaluation">evaluation</option><option value="voting">voting</option><option value="finished">finished</option></select></label><label>Причина override <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Установить override</button></form>
-<form method="post" action="/admin/jams/{{.Jam.ID}}/auto"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина возврата в auto <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Вернуть автоматическую стадию</button></form>
+<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/override"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Явная стадия <select name="stage" required><option value="upcoming">Сбор (upcoming)</option><option value="submission">Сдача (submission)</option><option value="evaluation">Оценка (evaluation)</option><option value="voting">Голосование (voting)</option><option value="finished">Финал (finished)</option></select></label><label>Причина override <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Установить override</button></form>
+<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/auto"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина возврата в auto <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Вернуть автоматическую стадию</button></form>
 </section>
 {{end}}
-</body></html>{{end}}
+</main>
+{{template "admin_footer" .}}
+{{end}}

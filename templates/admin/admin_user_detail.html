@@ -1,1 +1,24 @@
-{{define "admin_user_detail.html"}}<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Пользователь</title><link rel="stylesheet" href="/static/css/font.css"><style>body{max-width:60rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;background:#f2eee4;color:#211}main,section{padding:1.2rem;margin-bottom:1rem;border:1px solid #bbb3a5;background:#fffdf7}form{display:grid;gap:.6rem}.danger{color:#8d1111}</style></head><body><p><a href="/admin/users">← К пользователям</a></p>{{if .UserDetail}}<main><h1>{{.UserDetail.Username}}</h1><p>ID: {{.UserDetail.ID}}. Email: {{if .UserDetail.Email}}{{.UserDetail.Email}}{{else}}не указан{{end}}. Роль: {{.UserDetail.Role}}.</p><form method="post" action="/admin/users/{{.UserDetail.ID}}/role"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Новая роль <select name="role"><option value="user">user</option><option value="admin">admin</option></select></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><label><input type="checkbox" name="confirm" value="change_role" required> Подтверждаю изменение роли и отзыв сессий</label><button class="danger" type="submit">Изменить роль</button></form></main><section><h2>Членство</h2>{{range .UserDetail.Memberships}}<p>{{.JamTitle}} / {{.TeamName}}{{if .Captain}} / капитан{{end}}{{if .ProductEditor}} / редактор продукта{{end}}</p>{{else}}<p>Нет членства в командах.</p>{{end}}</section>{{else}}<p>{{.Error}}</p>{{end}}</body></html>{{end}}
+{{define "admin_user_detail.html"}}
+{{template "admin_head" .}}<title>{{if .UserDetail}}{{.UserDetail.Username}}{{else}}Пользователь{{end}} | Пользователи</title>
+</head>
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+<p class="admin-back"><a href="/admin/users">← К пользователям</a></p>
+{{template "admin_alerts" .}}
+{{if .UserDetail}}<section class="admin-section"><h2>{{.UserDetail.Username}}</h2>
+<p>ID: {{.UserDetail.ID}}. Email: {{if .UserDetail.Email}}{{.UserDetail.Email}}{{else}}не указан{{end}}. Роль: {{if eq .UserDetail.Role "admin"}}<span class="admin-badge badge-danger">admin</span>{{else}}<span class="admin-badge">user</span>{{end}}.</p>
+<p>Создан: {{moscowDateTime .UserDetail.CreatedAt}}. Изменён: {{moscowDateTime .UserDetail.UpdatedAt}}.</p>
+<form class="admin-form admin-danger-block" method="post" action="/admin/users/{{.UserDetail.ID}}/role">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+<label>Новая роль <select name="role">{{if eq .UserDetail.Role "admin"}}<option value="user">user</option><option value="admin" selected>admin</option>{{else}}<option value="user" selected>user</option><option value="admin">admin</option>{{end}}</select></label>
+<label>Причина <input name="reason" minlength="3" maxlength="1000" required></label>
+<label class="admin-check"><input type="checkbox" name="confirm" value="change_role" required> Подтверждаю изменение роли и отзыв всех сессий пользователя</label>
+<button class="admin-danger" type="submit">Изменить роль</button>
+</form></section>
+<section class="admin-section"><h2>Членство</h2>
+{{range .UserDetail.Memberships}}<p>{{.JamTitle}} / {{.TeamName}}{{if .Captain}} / капитан{{end}}{{if .ProductEditor}} / редактор продукта{{end}}</p>{{else}}<p>Нет членства в командах.</p>{{end}}
+</section>{{else}}<p>{{.Error}}</p>{{end}}
+</main>
+{{template "admin_footer" .}}
+{{end}}

@@ -1,5 +1,40 @@
-{{define "admin_questionnaire_response.html"}}<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ответ {{.Response.Username}}</title><link rel="stylesheet" href="/static/css/font.css"><style>body{max-width:64rem;margin:2rem auto;padding:0 1rem;font:15px/1.5 "Cutive Mono","Courier New",monospace;background:#f2eee4;color:#211}main,section,article{background:#fffdf7;border:1px solid #bbb3a5;padding:1.2rem;margin-bottom:1rem}.answer{white-space:pre-wrap}</style></head><body>
-<p><a href="/admin/jams/{{.Jam.ID}}/questionnaire/reports">← К отчёту</a></p><main><h1>{{.Response.Username}}</h1><p>Response № {{.Response.ResponseID}}, ревизия {{.Response.Revision}}, статус {{.Response.Status}}.</p><p>Команда при старте: {{.Response.TeamAtStartName}}. Текущая команда: {{if .Response.CurrentTeamName}}{{.Response.CurrentTeamName}}{{else}}нет{{end}}.</p></main>
-<section><h2>Текущие ответы response</h2>{{range .Answers}}<article><h3>{{.Position}}. {{.Prompt}}</h3><p class="answer">{{if .Answer}}{{.Answer}}{{else}}Не отвечено{{end}}</p></article>{{end}}</section>
-<section><h2>История</h2>{{range .History}}<article><h3>{{.Event}} · {{.CreatedAt}}</h3>{{range .Answers}}<h4>{{.Position}}. {{.Prompt}}</h4><p class="answer">{{if .Answer}}{{.Answer}}{{else}}Не отвечено{{end}}</p>{{end}}</article>{{else}}<p>История пока пуста.</p>{{end}}</section>
-</body></html>{{end}}
+{{define "admin_questionnaire_response.html"}}<!doctype html>
+<html lang="ru">
+<head>
+  {{template "admin_head" .}}
+  <title>Ответ {{.Response.Username}} | {{.Jam.Title}}</title>
+</head>
+<body>
+{{template "admin_header" .}}
+{{template "admin_jam_panel" .}}
+<main class="admin-main admin-main-narrow">
+  {{template "admin_alerts" .}}
+  <p class="admin-breadcrumbs"><a href="/admin/jams/{{.Jam.ID}}/questionnaire/reports">← Отчёты анкеты</a></p>
+  <section class="admin-section">
+    <h1>{{.Response.Username}}</h1>
+    <p>Ответ № {{.Response.ResponseID}} · ревизия {{.Response.Revision}} · статус: <span class="badge badge-muted">{{rusStatus .Response.Status}}</span></p>
+    <p>Команда при старте: {{.Response.TeamAtStartName}}. Текущая команда: {{if .Response.CurrentTeamName}}{{.Response.CurrentTeamName}}{{else}}нет{{end}}.</p>
+  </section>
+  <section class="admin-section">
+    <h2>Текущие ответы</h2>
+    {{range .Answers}}
+    <article class="admin-panel">
+      <h3>{{.Position}}. {{.Prompt}}</h3>
+      <p style="white-space:pre-wrap">{{if .Answer}}{{.Answer}}{{else}}Не отвечено{{end}}</p>
+    </article>
+    {{end}}
+  </section>
+  <section class="admin-section">
+    <h2>История</h2>
+    {{range .History}}
+    <article class="admin-panel">
+      <h3>{{.Event}} · {{moscowDateTime .CreatedAt}}</h3>
+      <p style="white-space:pre-wrap">{{range .Answers}}<strong>{{.Position}}. {{.Prompt}}</strong>
+      {{if .Answer}}{{.Answer}}{{else}}Не отвечено{{end}}
+
+      {{end}}</p>
+    </article>
+    {{else}}<p>История пока пуста.</p>{{end}}
+  </section>
+</main>
+{{template "admin_footer" .}}</html>{{end}}

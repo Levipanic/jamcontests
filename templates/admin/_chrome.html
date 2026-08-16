@@ -1,0 +1,50 @@
+{{define "admin_head"}}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><link rel="stylesheet" href="/static/css/font.css"><link rel="stylesheet" href="/static/css/admin.css">{{end}}
+
+{{define "admin_header"}}
+<header class="admin-topbar">
+  <div>
+    <p class="admin-brand">Администрирование</p>
+    <p class="admin-identity">Личное дело: {{.User.Username}}</p>
+  </div>
+  <nav class="admin-nav" aria-label="Главное меню администрирования">
+    <a href="/admin">Обзор</a>
+    <a href="/admin/jams">Джемы</a>
+    <a href="/admin/users">Пользователи</a>
+    <a href="/admin/teams">Команды</a>
+    <a href="/admin/audit">Аудит</a>
+  </nav>
+  <form class="admin-logout" method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="button button-quiet" type="submit">Выйти</button></form>
+</header>
+{{end}}
+
+{{define "admin_alerts"}}{{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}{{if .Ok}}<p class="alert alert-ok" role="status">{{.Ok}}</p>{{end}}{{end}}
+
+{{define "admin_jam_panel"}}{{if .Jam}}
+<section class="admin-jam-panel" aria-label="Контекст джема">
+  <div class="admin-jam-head">
+    <p class="admin-breadcrumbs"><a href="/admin/jams">Джемы</a> → № {{.Jam.ID}}</p>
+    <h1>{{.Jam.Title}}</h1>
+    <span class="badge badge-stage-{{.Jam.Stage}}">{{rusStage .Jam.Stage}} ({{.Jam.Stage}})</span>
+    <span class="badge badge-{{.Jam.Visibility}}">{{rusVisibility .Jam.Visibility}}</span>
+    {{if .Jam.Schedule.Override}}<span class="badge badge-danger">override ({{.Jam.Schedule.Override}})</span>{{else}}<span class="badge badge-muted">режим: авто</span>{{end}}
+  </div>
+  <p class="admin-jam-meta">submission: {{.Jam.SubmissionLocal}} · evaluation: {{.Jam.EvaluationLocal}} · voting: {{.Jam.VotingLocal}} · завершение: {{.Jam.FinishesLocal}} (Europe/Moscow)</p>
+  <nav class="admin-jam-nav" aria-label="Разделы джема">
+    <a href="/admin/jams/{{.Jam.ID}}/edit">Джем</a>
+    <a href="/admin/jams/{{.Jam.ID}}/questionnaire">Опросник</a>
+    <a href="/admin/jams/{{.Jam.ID}}/themes">Темы</a>
+    <a href="/admin/jams/{{.Jam.ID}}/products">Продукты</a>
+    <a href="/admin/jams/{{.Jam.ID}}/nominations">Номинации</a>
+    <a href="/admin/jams/{{.Jam.ID}}/votes">Голоса</a>
+    <a href="/admin/jams/{{.Jam.ID}}/bumps">Бампы</a>
+  </nav>
+</section>
+{{end}}{{end}}
+
+{{define "admin_pager"}}{{if and .Pager (gt .Pager.TotalPages 1)}}<nav class="admin-pager" aria-label="Страницы">
+  {{if gt .Pager.Page 1}}<a href="{{.Pager.BaseURL}}page={{sub .Pager.Page 1}}">← Предыдущая</a>{{end}}
+  <span>Стр. {{.Pager.Page}} из {{.Pager.TotalPages}} · всего {{.Pager.Total}}</span>
+  {{if lt .Pager.Page .Pager.TotalPages}}<a href="{{.Pager.BaseURL}}page={{add .Pager.Page 1}}">Следующая →</a>{{end}}
+</nav>{{end}}{{end}}
+
+{{define "admin_footer"}}</body></html>{{end}}

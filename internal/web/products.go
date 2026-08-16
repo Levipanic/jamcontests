@@ -79,6 +79,7 @@ type adminProductsPageData struct {
 	PageData
 	Jam      *adminJam
 	Products []ProductView
+	Pager    *adminPager
 }
 
 type productTeamRecord struct {
@@ -565,7 +566,7 @@ func (a *App) adminProductUpdate(c *gin.Context) {
 		a.adminProductFailure(c, jamID, "commit product moderation", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/products", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/products", jamID), "Модерация продукта применена.")
 }
 
 func (a *App) renderAdminProducts(c *gin.Context, jamID int64, message string, status int) {
@@ -574,11 +575,17 @@ func (a *App) renderAdminProducts(c *gin.Context, jamID int64, message string, s
 		a.handleAdminLoadError(c, "load admin product jam", err)
 		return
 	}
+	page, per := adminPageParam(c)
+	var total int
+	if err = a.pool.QueryRow(c.Request.Context(), `SELECT count(*) FROM products WHERE jam_id=$1`, jamID).Scan(&total); err != nil {
+		a.adminProductFailure(c, jamID, "count admin products", err)
+		return
+	}
 	rows, err := a.pool.Query(c.Request.Context(), `
 		SELECT product.id, product.team_id, team.name, product.title, product.result_url,
 		       product.description, COALESCE(product.commentary_url, ''), product.notes, product.status
 		FROM products product JOIN teams team ON team.id=product.team_id AND team.jam_id=product.jam_id
-		WHERE product.jam_id=$1 ORDER BY lower(team.name), product.id`, jamID)
+		WHERE product.jam_id=$1 ORDER BY lower(team.name), product.id OFFSET $2 LIMIT $3`, jamID, (page-1)*per, per)
 	if err != nil {
 		a.adminProductFailure(c, jamID, "load admin products", err)
 		return
@@ -599,7 +606,7 @@ func (a *App) renderAdminProducts(c *gin.Context, jamID int64, message string, s
 		a.adminProductFailure(c, jamID, "iterate admin products", err)
 		return
 	}
-	c.HTML(status, "admin_products.html", adminProductsPageData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message}, Jam: jam, Products: products})
+	c.HTML(status, "admin_products.html", adminProductsPageData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message, Ok: c.Query("ok")}, Jam: jam, Products: products, Pager: buildAdminPager(fmt.Sprintf("/admin/jams/%d/products", jamID), page, per, total)})
 }
 
 func productAuditData(product ProductView) map[string]any {

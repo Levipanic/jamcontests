@@ -1,21 +1,98 @@
-{{define "admin_questionnaire.html"}}<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Анкета | {{.Jam.Title}}</title><link rel="stylesheet" href="/static/css/font.css"><style>
-body{max-width:62rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}main,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}label{display:block;margin:.8rem 0}input,textarea,select{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}textarea{min-height:5rem}.inline{width:auto}.error,.warning{color:#8d1111;font-weight:bold}.question{border-left:4px solid #777;padding-left:1rem}.danger{color:#8d1111}
-</style></head><body>
-<p><a href="/admin/jams/{{.Jam.ID}}/edit">← К джему</a></p><main><h1>Анкета: {{.Jam.Title}}</h1><p>Ревизия: {{.QuestionnaireRevision}}. Вопросов: {{.Jam.QuestionCount}}. Ответов: {{.QuestionnaireResponses}} (черновиков {{.QuestionnaireDrafts}}, завершённых {{.QuestionnaireCompleted}}).</p><p>Структурные изменения доступны только у draft-джема до первого сохранённого ответа.</p><p><a href="/admin/jams/{{.Jam.ID}}/questionnaire/reports">Отчёты и экспорт CSV</a></p>
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}{{if .QuestionnaireLocked}}<p class="warning">Конструктор заблокирован: джем уже опубликован или существует сохранённый ответ.</p>{{end}}</main>
-<section><h2>Вопросы</h2>{{if .Questions}}{{range .Questions}}<article class="question"><h3>{{.Position}}. {{.Prompt}}</h3><p>Тип: {{.Type}}{{if .Required}} · обязательный{{end}}</p>{{if .Hint}}<p>Подсказка: {{.Hint}}</p>{{end}}{{if .TextLimit}}<p>Лимит текста: {{.TextLimit}}</p>{{end}}{{if .SelectionLimit}}<p>Лимит выбора: {{.SelectionLimit}}</p>{{end}}{{if .Options}}<ul>{{range .Options}}<li>{{.}}</li>{{end}}</ul>{{end}}
-{{if not $.QuestionnaireLocked}}<p><a href="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/edit">Редактировать</a></p><form method="post" action="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/delete"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина удаления <input name="reason" minlength="3" maxlength="1000" required></label><button class="danger" type="submit">Удалить вопрос</button></form>{{end}}</article>{{end}}{{else}}<p>Вопросов пока нет.</p>{{end}}</section>
-{{if not .QuestionnaireLocked}}<section><h2>{{if .EditingQuestion}}Редактировать вопрос{{else}}Добавить вопрос{{end}}</h2>
-<form method="post" action="{{if .EditingQuestion}}/admin/jams/{{.Jam.ID}}/questionnaire/questions/{{.QuestionForm.ID}}/edit{{else}}/admin/jams/{{.Jam.ID}}/questionnaire/questions{{end}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-<label>Тип <select name="type" required><option value="short_text" {{if eq .QuestionForm.Type "short_text"}}selected{{end}}>Короткий текст</option><option value="single_choice" {{if eq .QuestionForm.Type "single_choice"}}selected{{end}}>Одиночный выбор</option><option value="multiple_choice" {{if eq .QuestionForm.Type "multiple_choice"}}selected{{end}}>Множественный выбор</option></select></label>
-<label>Формулировка <textarea name="prompt" maxlength="500" required>{{.QuestionForm.Prompt}}</textarea></label><label>Подсказка <textarea name="hint" maxlength="1000">{{.QuestionForm.Hint}}</textarea></label>
-<label><input class="inline" type="checkbox" name="required" {{if .QuestionForm.Required}}checked{{end}}> Обязательный вопрос</label>
-<label>Лимит текста (только short_text) <input type="number" min="1" max="5000" name="text_limit" value="{{.QuestionForm.TextLimit}}"></label>
-<label>Лимит выбранных вариантов (только multiple_choice) <input type="number" min="1" name="selection_limit" value="{{.QuestionForm.SelectionLimit}}"></label>
-<label>Варианты, по одному в строке (для choice) <textarea name="options">{{.QuestionForm.Options}}</textarea></label>
+{{define "admin_questionnaire.html"}}
+{{template "admin_head" .}}<title>Анкета | {{.Jam.Title}}</title>
+</head>
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_jam_panel" .}}
+{{template "admin_alerts" .}}
+<section class="admin-section"><h2>Анкета</h2>
+<p>Ревизия: {{.QuestionnaireRevision}}. Вопросов: {{.Jam.QuestionCount}}. Ответов: {{.QuestionnaireResponses}} (черновиков {{.QuestionnaireDrafts}}, завершённых {{.QuestionnaireCompleted}}).</p>
+<p class="admin-help">Структурные изменения доступны только у draft-джема до первого сохранённого ответа.</p>
+<p><a href="/admin/jams/{{.Jam.ID}}/questionnaire/reports">Отчёты и экспорт CSV</a></p>
+{{if .QuestionnaireLocked}}<p class="admin-warning">Конструктор заблокирован: джем уже опубликован или существует сохранённый ответ.</p>{{end}}</section>
+<section class="admin-section"><h2>Вопросы</h2>
+{{if .Questions}}<ol id="questionOrder" class="admin-question-list">
+{{range .Questions}}<li class="admin-question" data-question-id="{{.ID}}">
+<div class="admin-question-head"><h3>№ {{.Position}}. {{.Prompt}}</h3>{{if not $.QuestionnaireLocked}}<span class="admin-reorder-controls"><button type="button" class="admin-reorder-up" aria-label="Выше">↑</button><button type="button" class="admin-reorder-down" aria-label="Ниже">↓</button></span>{{end}}</div>
+<p class="admin-meta">Тип: {{.Type}}{{if .Required}} · обязательный{{end}}</p>
+{{if .Hint}}<p class="admin-meta">Подсказка: {{.Hint}}</p>{{end}}
+{{if .TextLimit}}<p class="admin-meta">Лимит текста: {{.TextLimit}}</p>{{end}}
+{{if .SelectionLimit}}<p class="admin-meta">Лимит выбора: {{.SelectionLimit}}</p>{{end}}
+{{if .Options}}<ul class="admin-list">{{range .Options}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{if not $.QuestionnaireLocked}}<p class="admin-actions"><a href="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/edit">Редактировать</a></p><form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/delete"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина удаления <input name="reason" minlength="3" maxlength="1000" required></label><button class="admin-danger" type="submit">Удалить вопрос</button></form>{{end}}
+</li>{{end}}</ol>
+{{if not .QuestionnaireLocked}}<form class="admin-form admin-reorder" method="post" action="/admin/jams/{{.Jam.ID}}/questionnaire/order"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="order" id="questionOrderValue" value=""><label>Причина перестановки <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Применить порядок</button></form>
+<script>
+(function () {
+  var list = document.getElementById("questionOrder");
+  if (!list) { return; }
+  list.addEventListener("click", function (event) {
+    var button = event.target.closest("button");
+    if (!button) { return; }
+    var item = button.closest("li");
+    if (!item) { return; }
+    if (button.classList.contains("admin-reorder-up") && item.previousElementSibling) {
+      list.insertBefore(item, item.previousElementSibling);
+      button.disabled = true;
+    } else if (button.classList.contains("admin-reorder-down") && item.nextElementSibling) {
+      list.insertBefore(item.nextElementSibling, item);
+      button.disabled = true;
+    }
+  });
+  var form = document.querySelector(".admin-reorder");
+  if (form) {
+    form.addEventListener("submit", function () {
+      var ids = [];
+      Array.prototype.forEach.call(list.querySelectorAll("li[data-question-id]"), function (element) {
+        ids.push(element.getAttribute("data-question-id"));
+      });
+      document.getElementById("questionOrderValue").value = ids.join(",");
+    });
+  }
+})();
+</script>
+<script>
+(function () {
+  var type = document.getElementById("questionType");
+  if (!type) { return; }
+  var fields = {
+    "short_text": ["questionFieldTextLimit"],
+    "single_choice": ["questionFieldChoice"],
+    "multiple_choice": ["questionFieldChoice", "questionFieldMultiple"]
+  };
+  function apply() {
+    var visible = fields[type.value] || [];
+    Array.prototype.forEach.call(document.querySelectorAll(".questionFieldTextLimit, .questionFieldChoice, .questionFieldMultiple"), function (field) {
+      field.style.display = visible.indexOf(field.className.split(/\s+/).filter(function (name) { return name.indexOf("questionField") === 0; })[0]) >= 0 ? "" : "none";
+    });
+  }
+  type.addEventListener("change", apply);
+  apply();
+})();
+</script>
+<script>
+(function () {
+  var prompt = document.getElementById("questionPrompt");
+  var preview = document.getElementById("questionPreview");
+  if (!prompt || !preview) { return; }
+  prompt.addEventListener("input", function () { preview.textContent = prompt.value; });
+})();
+</script>{{end}}
+{{else}}<p>Вопросов пока нет.</p>{{end}}</section>
+{{if not .QuestionnaireLocked}}<section class="admin-section"><h2>{{if .EditingQuestion}}Редактировать вопрос{{else}}Добавить вопрос{{end}}</h2>
+<form class="admin-form" id="questionForm" method="post" action="{{if .EditingQuestion}}/admin/jams/{{.Jam.ID}}/questionnaire/questions/{{.QuestionForm.ID}}/edit{{else}}/admin/jams/{{.Jam.ID}}/questionnaire/questions{{end}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+<label>Тип <select name="type" id="questionType" required><option value="short_text" {{if eq .QuestionForm.Type "short_text"}}selected{{end}}>Короткий текст</option><option value="single_choice" {{if eq .QuestionForm.Type "single_choice"}}selected{{end}}>Одиночный выбор</option><option value="multiple_choice" {{if eq .QuestionForm.Type "multiple_choice"}}selected{{end}}>Множественный выбор</option></select></label>
+<label>Формулировка <textarea name="prompt" id="questionPrompt" maxlength="500" required>{{.QuestionForm.Prompt}}</textarea></label>
+<p class="admin-preview"><span class="admin-meta">Предпросмотр:</span> <em id="questionPreview"></em></p>
+<label>Подсказка <textarea name="hint" maxlength="1000">{{.QuestionForm.Hint}}</textarea></label>
+<label class="admin-check"><input type="checkbox" name="required" {{if .QuestionForm.Required}}checked{{end}}> Обязательный вопрос</label>
+<div class="admin-field questionFieldTextLimit"><label>Лимит текста (только short_text) <input type="number" min="1" max="5000" name="text_limit" value="{{.QuestionForm.TextLimit}}"></label></div>
+<div class="admin-field questionFieldMultiple"><label>Лимит выбранных вариантов (только multiple_choice) <input type="number" min="1" name="selection_limit" value="{{.QuestionForm.SelectionLimit}}"></label></div>
+<div class="admin-field questionFieldChoice"><label>Варианты, по одному в строке (для choice) <textarea name="options">{{.QuestionForm.Options}}</textarea></label></div>
 {{if .EditingQuestion}}<label>Позиция, начиная с 0 <input type="number" min="0" name="position" value="{{.QuestionForm.Position}}"></label>{{end}}
 <label>Причина изменения <textarea name="reason" minlength="3" maxlength="1000" required>{{.QuestionForm.Reason}}</textarea></label><button type="submit">{{if .EditingQuestion}}Сохранить вопрос{{else}}Добавить вопрос{{end}}</button></form></section>{{end}}
-{{if and .QuestionnaireLocked (eq .Jam.Visibility "draft") (eq .Jam.Stage "upcoming")}}<section><h2 class="danger">Сбросить текущие ответы</h2><p>Будет создана новая ревизия с копией структуры. Текущие ответы перестанут влиять на допуск, но останутся в неизменяемой истории. Действие необратимо.</p><form method="post" action="/admin/jams/{{.Jam.ID}}/questionnaire/reset"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина сброса <textarea name="reason" minlength="3" maxlength="1000" required></textarea></label><label>Для подтверждения введите «СБРОСИТЬ ОТВЕТЫ» <input name="confirm" required></label><button class="danger" type="submit">Создать новую ревизию</button></form></section>{{end}}
-</body></html>{{end}}
+{{if and .QuestionnaireLocked (eq .Jam.Visibility "draft") (eq .Jam.Stage "upcoming")}}<section class="admin-section admin-danger-block"><h2>Сбросить текущие ответы</h2><p class="admin-help">Будет создана новая ревизия с копией структуры. Текущие ответы перестанут влиять на допуск, но останутся в неизменяемой истории. Действие необратимо.</p><form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/questionnaire/reset"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина сброса <textarea name="reason" minlength="3" maxlength="1000" required></textarea></label><label>Для подтверждения введите «СБРОСИТЬ ОТВЕТЫ» <input name="confirm" required></label><button class="admin-danger" type="submit">Создать новую ревизию</button></form></section>{{end}}
+</main>
+{{template "admin_footer" .}}
+{{end}}

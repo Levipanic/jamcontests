@@ -410,7 +410,7 @@ func (a *App) adminNominationCreate(c *gin.Context) {
 		a.adminNominationFailure(c, "commit curator nomination creation", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/nominations", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/nominations", jamID), "Кураторская номинация создана.")
 }
 
 func (a *App) adminNominationEdit(c *gin.Context) {
@@ -522,7 +522,7 @@ func (a *App) adminNominationModerate(c *gin.Context) {
 		a.adminNominationFailure(c, "commit nomination moderation", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/nominations", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/nominations", jamID), "Модерация номинации применена.")
 }
 
 func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64, title, reason string, withdraw bool) {
@@ -591,7 +591,7 @@ func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64,
 		a.adminNominationFailure(c, "commit curator nomination mutation", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/nominations", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/nominations", jamID), "Номинация обновлена.")
 }
 
 func lockNominationJam(ctx context.Context, tx pgx.Tx, jamID int64) (Stage, error) {
@@ -650,7 +650,7 @@ func (a *App) renderAdminNominations(c *gin.Context, jamID int64, message string
 		a.adminNominationFailure(c, "iterate admin nominations", err)
 		return
 	}
-	c.HTML(status, "admin_nominations.html", adminNominationsPageData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message}, Jam: jam, Nominations: nominations, Mutable: canAdminMutateNominations(jam.Stage)})
+	c.HTML(status, "admin_nominations.html", adminNominationsPageData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message, Ok: c.Query("ok")}, Jam: jam, Nominations: nominations, Mutable: canAdminMutateNominations(jam.Stage)})
 }
 
 func normalizeNominationTitle(value string) string {

@@ -21,11 +21,15 @@ type adminControlPageData struct {
 	User       *User
 	CSRFToken  string
 	Error      string
+	Ok         string
 	Users      []adminControlUser
 	Teams      []adminControlTeam
 	Audit      []adminControlAudit
 	Search     string
 	UserDetail *adminControlUserDetail
+	Pager      *adminPager
+	JamFilter  int64
+	Jams       []adminJam
 }
 
 type adminControlUser struct {
@@ -113,11 +117,17 @@ func (a *App) registerAdminControlRoutes(router *gin.Engine) {
 }
 
 func (a *App) adminControlAuditPage(c *gin.Context) {
+	page, per := adminPageParam(c)
+	var total int
+	if err := a.pool.QueryRow(c.Request.Context(), `SELECT count(*) FROM admin_audit_log l JOIN users u ON u.id = l.admin_user_id`).Scan(&total); err != nil {
+		a.adminControlRender(c, http.StatusInternalServerError, "admin_audit.html", adminControlPageData{Error: "Не удалось загрузить журнал аудита."})
+		return
+	}
 	rows, err := a.pool.Query(c.Request.Context(), `
 		SELECT l.id, u.username, l.action, l.entity_type, l.entity_id, l.reason,
 		       COALESCE(l.before_data::text, ''), COALESCE(l.after_data::text, ''), l.created_at
 		FROM admin_audit_log l JOIN users u ON u.id = l.admin_user_id
-		ORDER BY l.created_at DESC, l.id DESC LIMIT 200`)
+		ORDER BY l.created_at DESC, l.id DESC OFFSET $1 LIMIT $2`, (page-1)*per, per)
 	if err != nil {
 		a.adminControlRender(c, http.StatusInternalServerError, "admin_audit.html", adminControlPageData{Error: "Не удалось загрузить журнал аудита."})
 		return
@@ -138,7 +148,10 @@ func (a *App) adminControlAuditPage(c *gin.Context) {
 		a.adminControlRender(c, http.StatusInternalServerError, "admin_audit.html", adminControlPageData{Error: "Не удалось загрузить журнал аудита."})
 		return
 	}
-	a.adminControlRender(c, http.StatusOK, "admin_audit.html", adminControlPageData{Audit: entries})
+	a.adminControlRender(c, http.StatusOK, "admin_audit.html", adminControlPageData{
+		Audit: entries, Error: c.Query("error"), Ok: c.Query("ok"),
+		Pager: buildAdminPager("/admin/audit", page, per, total),
+	})
 }
 
 func (a *App) adminControlUsersPage(c *gin.Context) {
@@ -147,15 +160,24 @@ func (a *App) adminControlUsersPage(c *gin.Context) {
 		a.adminControlRender(c, http.StatusBadRequest, "admin_users.html", adminControlPageData{Error: "Поисковый запрос слишком длинный.", Search: search})
 		return
 	}
+	page, per := adminPageParam(c)
 	var exactID int64
 	if parsed, parseErr := strconv.ParseInt(search, 10, 64); parseErr == nil && parsed > 0 {
 		exactID = parsed
+	}
+	var total int
+	if err := a.pool.QueryRow(c.Request.Context(), `
+		SELECT count(*) FROM users
+		WHERE $1='' OR strpos(lower(username), lower($1))>0
+		   OR strpos(lower(COALESCE(email, '')), lower($1))>0 OR id=$2`, search, exactID).Scan(&total); err != nil {
+		a.adminControlRender(c, http.StatusInternalServerError, "admin_users.html", adminControlPageData{Error: "Не удалось загрузить пользователей."})
+		return
 	}
 	rows, err := a.pool.Query(c.Request.Context(), `
 		SELECT id, username, email, role FROM users
 		WHERE $1='' OR strpos(lower(username), lower($1))>0
 		   OR strpos(lower(COALESCE(email, '')), lower($1))>0 OR id=$2
-		ORDER BY lower(username), id`, search, exactID)
+		ORDER BY lower(username), id OFFSET $3 LIMIT $4`, search, exactID, (page-1)*per, per)
 	if err != nil {
 		a.adminControlRender(c, http.StatusInternalServerError, "admin_users.html", adminControlPageData{Error: "Не удалось загрузить пользователей."})
 		return
@@ -176,7 +198,10 @@ func (a *App) adminControlUsersPage(c *gin.Context) {
 		a.adminControlRender(c, http.StatusInternalServerError, "admin_users.html", adminControlPageData{Error: "Не удалось загрузить пользователей."})
 		return
 	}
-	a.adminControlRender(c, http.StatusOK, "admin_users.html", adminControlPageData{Users: users, Error: c.Query("error"), Search: search})
+	a.adminControlRender(c, http.StatusOK, "admin_users.html", adminControlPageData{
+		Users: users, Error: c.Query("error"), Ok: c.Query("ok"), Search: search,
+		Pager: buildAdminPager("/admin/users?q="+url.QueryEscape(search), page, per, total),
+	})
 }
 
 func (a *App) adminControlUserDetailPage(c *gin.Context) {
@@ -211,7 +236,7 @@ func (a *App) adminControlUserDetailPage(c *gin.Context) {
 		}
 		detail.Memberships = append(detail.Memberships, membership)
 	}
-	a.adminControlRender(c, http.StatusOK, "admin_user_detail.html", adminControlPageData{UserDetail: &detail, Error: c.Query("error")})
+	a.adminControlRender(c, http.StatusOK, "admin_user_detail.html", adminControlPageData{UserDetail: &detail, Error: c.Query("error"), Ok: c.Query("ok")})
 }
 
 func (a *App) adminControlUserRole(c *gin.Context) {
@@ -282,17 +307,34 @@ func (a *App) adminControlUserRole(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/users", "commit user role update", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/users")
+	adminOkRedirect(c, "/admin/users", "Роль пользователя изменена, сессии отозваны.")
 }
 
 func (a *App) adminControlTeamsPage(c *gin.Context) {
-	teams, err := a.loadAdminControlTeams(c.Request.Context())
+	var jamFilter int64
+	if raw := c.Query("jam"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 {
+			a.adminControlRender(c, http.StatusBadRequest, "admin_teams.html", adminControlPageData{Error: "Некорректный фильтр джема."})
+			return
+		}
+		jamFilter = parsed
+	}
+	teams, err := a.loadAdminControlTeams(c.Request.Context(), jamFilter)
 	if err != nil {
 		a.logger.Error("load admin teams", "error", err)
 		a.adminControlRender(c, http.StatusInternalServerError, "admin_teams.html", adminControlPageData{Error: "Не удалось загрузить команды."})
 		return
 	}
-	a.adminControlRender(c, http.StatusOK, "admin_teams.html", adminControlPageData{Teams: teams, Error: c.Query("error")})
+	jams, err := a.loadAdminJams(c.Request.Context())
+	if err != nil {
+		a.logger.Error("load admin jam filter options", "error", err)
+		a.adminControlRender(c, http.StatusInternalServerError, "admin_teams.html", adminControlPageData{Error: "Не удалось загрузить джемы."})
+		return
+	}
+	a.adminControlRender(c, http.StatusOK, "admin_teams.html", adminControlPageData{
+		Teams: teams, Error: c.Query("error"), Ok: c.Query("ok"), JamFilter: jamFilter, Jams: jams,
+	})
 }
 
 func (a *App) adminControlTeamProfile(c *gin.Context) {
@@ -334,7 +376,7 @@ func (a *App) adminControlTeamProfile(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "commit team profile", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/teams")
+	adminOkRedirect(c, "/admin/teams", "Профиль команды обновлён.")
 }
 
 func (a *App) adminControlTeamAvatarRemove(c *gin.Context) {
@@ -371,7 +413,7 @@ func (a *App) adminControlTeamAvatarRemove(c *gin.Context) {
 		return
 	}
 	a.teamRemoveAvatar(avatarPath)
-	c.Redirect(http.StatusSeeOther, "/admin/teams")
+	adminOkRedirect(c, "/admin/teams", "Аватар команды удалён.")
 }
 
 func (a *App) adminControlTeamInviteRevoke(c *gin.Context) {
@@ -412,7 +454,7 @@ func (a *App) adminControlTeamInviteRevoke(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "commit team invite revocation", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/teams")
+	adminOkRedirect(c, "/admin/teams", "Приглашение отозвано.")
 }
 
 func (a *App) adminControlTeamMemberAdd(c *gin.Context) {
@@ -489,7 +531,7 @@ func (a *App) adminControlTeamMemberAdd(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "commit team member addition", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/teams")
+	adminOkRedirect(c, "/admin/teams", "Участник добавлен в команду.")
 }
 
 func (a *App) adminControlTeamMemberRemove(c *gin.Context) {
@@ -533,7 +575,7 @@ func (a *App) adminControlTeamMemberRemove(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "commit team member removal", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/teams")
+	adminOkRedirect(c, "/admin/teams", "Участник удалён из команды.")
 }
 
 func (a *App) adminControlTeamCaptain(c *gin.Context) {
@@ -587,7 +629,7 @@ func (a *App) adminControlTeamCaptain(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "commit team captain update", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/teams")
+	adminOkRedirect(c, "/admin/teams", "Капитан команды изменён.")
 }
 
 func (a *App) adminControlTeamEligibility(c *gin.Context) {
@@ -647,10 +689,10 @@ func (a *App) adminControlTeamEligibility(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "commit eligibility override", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/admin/teams")
+	adminOkRedirect(c, "/admin/teams", "Eligibility override обновлён.")
 }
 
-func (a *App) loadAdminControlTeams(ctx context.Context) ([]adminControlTeam, error) {
+func (a *App) loadAdminControlTeams(ctx context.Context, jamFilter int64) ([]adminControlTeam, error) {
 	rows, err := a.pool.Query(ctx, `
 		SELECT t.id, t.jam_id, j.title, t.name, t.description, t.avatar_path,
 		       t.captain_user_id, captain.username, j.max_team_size,
@@ -668,7 +710,8 @@ func (a *App) loadAdminControlTeams(ctx context.Context) ([]adminControlTeam, er
 		JOIN users captain ON captain.id=t.captain_user_id
 		LEFT JOIN team_invites i ON i.team_id=t.id
 		LEFT JOIN team_eligibility_overrides eo ON eo.team_id=t.id
-		ORDER BY j.created_at DESC, lower(t.name), t.id`)
+		WHERE $1=0 OR t.jam_id=$1
+		ORDER BY j.created_at DESC, lower(t.name), t.id`, jamFilter)
 	if err != nil {
 		return nil, err
 	}

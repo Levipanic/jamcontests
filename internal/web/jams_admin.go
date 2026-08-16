@@ -29,6 +29,7 @@ type adminJam struct {
 	MaxTeamSize     int
 	Stage           Stage
 	QuestionCount   int
+	ThemeCount      int
 	SubmissionLocal string
 	EvaluationLocal string
 	VotingLocal     string
@@ -111,6 +112,7 @@ func (a *App) registerJamAdminRoutes(router *gin.Engine) {
 	admin.GET("/jams/:id/questionnaire/questions/:questionID/edit", a.editQuestionAdminPage)
 	admin.POST("/jams/:id/questionnaire/questions/:questionID/edit", a.updateQuestionAdmin)
 	admin.POST("/jams/:id/questionnaire/questions/:questionID/delete", a.deleteQuestionAdmin)
+	admin.POST("/jams/:id/questionnaire/order", a.questionnaireOrderAdmin)
 	admin.POST("/jams/:id/questionnaire/reset", a.resetQuestionnaireAdmin)
 	admin.GET("/jams/:id/questionnaire/reports", a.questionnaireAdminReportsPage)
 	admin.GET("/jams/:id/questionnaire/reports/responses/:responseID", a.questionnaireAdminResponsePage)
@@ -124,7 +126,7 @@ func (a *App) jamAdminDashboard(c *gin.Context) {
 		a.renderJamAdmin(c, http.StatusInternalServerError, "admin_jams.html", jamAdminPageData{PageData: PageData{Error: "Не удалось загрузить джемы."}})
 		return
 	}
-	a.renderJamAdmin(c, http.StatusOK, "admin_jams.html", jamAdminPageData{Jams: jams, Development: !a.config.Production(), PageData: PageData{Error: c.Query("error")}})
+	a.renderJamAdmin(c, http.StatusOK, "admin_jams.html", jamAdminPageData{Jams: jams, Development: !a.config.Production(), PageData: PageData{Error: c.Query("error"), Ok: c.Query("ok")}})
 }
 
 func (a *App) newJamAdminPage(c *gin.Context) {
@@ -256,7 +258,7 @@ func (a *App) createJamAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "commit jam creation", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/edit", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), "Джем создан. К публикации нужны хотя бы один вопрос анкеты и одна тема.")
 }
 
 func (a *App) editJamAdminPage(c *gin.Context) {
@@ -357,7 +359,7 @@ func (a *App) updateJamAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "commit jam update", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/edit", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), "Изменения джема сохранены.")
 }
 
 func (a *App) publishJamAdmin(c *gin.Context) {
@@ -448,7 +450,11 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 		a.jamAdminFailure(c, "commit jam visibility", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/edit", jamID))
+	message := "Джем опубликован."
+	if visibility == "draft" {
+		message = "Джем снят с публикации."
+	}
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), message)
 }
 
 func canUnpublishJam(stage Stage) bool {
@@ -546,7 +552,11 @@ func (a *App) setJamOverride(c *gin.Context, override *Stage) {
 		a.jamAdminFailure(c, "commit jam override", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/edit", jamID))
+	message := "Установлен явный override стадии."
+	if override == nil {
+		message = "Джем возвращён к автоматическому расчёту стадии."
+	}
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), message)
 }
 
 func (a *App) questionnaireAdminPage(c *gin.Context) {
@@ -554,11 +564,7 @@ func (a *App) questionnaireAdminPage(c *gin.Context) {
 	if !ok {
 		return
 	}
-	message := ""
-	if c.Query("reset") == "1" {
-		message = "Создана новая ревизия анкеты. Исторические ответы сохранены и больше не влияют на допуск."
-	}
-	a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{Type: "short_text", TextLimit: "500"}, false, message, http.StatusOK)
+	a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{Type: "short_text", TextLimit: "500"}, false, "", http.StatusOK)
 }
 
 func (a *App) editQuestionAdminPage(c *gin.Context) {
@@ -688,7 +694,11 @@ func (a *App) mutateQuestionAdmin(c *gin.Context, editing bool) {
 		a.jamAdminFailure(c, "commit questionnaire question", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/questionnaire", jamID))
+	message := "Вопрос добавлен."
+	if editing {
+		message = "Вопрос обновлён."
+	}
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/questionnaire", jamID), message)
 }
 
 func (a *App) deleteQuestionAdmin(c *gin.Context) {
@@ -747,7 +757,141 @@ func (a *App) deleteQuestionAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "commit question deletion", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/questionnaire", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/questionnaire", jamID), "Вопрос удалён.")
+}
+
+// questionnaireOrderAdmin applies a complete new question order for the
+// current questionnaire revision. The submitted set must match the existing
+// questions exactly; every change is audited.
+func (a *App) questionnaireOrderAdmin(c *gin.Context) {
+	jamID, ok := adminID(c, "id")
+	if !ok {
+		return
+	}
+	reason, err := validateReason(c.PostForm("reason"))
+	if err != nil {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	var requested []int64
+	for _, raw := range strings.Split(c.PostForm("order"), ",") {
+		id, parseErr := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if parseErr != nil || id < 1 {
+			a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Некорректный порядок вопросов.", http.StatusUnprocessableEntity)
+			return
+		}
+		requested = append(requested, id)
+	}
+	if len(requested) == 0 {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Некорректный порядок вопросов.", http.StatusUnprocessableEntity)
+		return
+	}
+	ctx := c.Request.Context()
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		a.jamAdminFailure(c, "begin questionnaire reorder", err)
+		return
+	}
+	defer tx.Rollback(ctx)
+	questionnaireID, locked, err := lockEditableQuestionnaire(ctx, tx, jamID)
+	if err != nil {
+		if errors.Is(err, errAdminInput) {
+			tx.Rollback(ctx)
+			a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Анкету можно структурно изменять только у draft-джема.", http.StatusConflict)
+			return
+		}
+		a.handleAdminLoadError(c, "lock questionnaire for reorder", err)
+		return
+	}
+	if locked {
+		tx.Rollback(ctx)
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Перестановка заблокирована после первого сохранённого ответа.", http.StatusConflict)
+		return
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT question.id, question.position FROM questionnaire_questions question
+		JOIN questionnaires questionnaire ON questionnaire.id=question.questionnaire_id
+		WHERE question.questionnaire_id=$1 AND question.revision=questionnaire.current_revision
+		ORDER BY question.position, question.id`, questionnaireID)
+	if err != nil {
+		a.jamAdminFailure(c, "load questionnaire order", err)
+		return
+	}
+	var current []adminQuestion
+	for rows.Next() {
+		var question adminQuestion
+		if err = rows.Scan(&question.ID, &question.Position); err != nil {
+			rows.Close()
+			a.jamAdminFailure(c, "scan questionnaire order", err)
+			return
+		}
+		current = append(current, question)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		a.jamAdminFailure(c, "iterate questionnaire order", err)
+		return
+	}
+	rows.Close()
+	if len(requested) != len(current) {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Порядок не совпадает с текущим списком вопросов.", http.StatusConflict)
+		return
+	}
+	seen := make(map[int64]bool, len(requested))
+	for _, id := range requested {
+		seen[id] = true
+	}
+	for _, question := range current {
+		if !seen[question.ID] {
+			a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Порядок не совпадает с текущим списком вопросов.", http.StatusConflict)
+			return
+		}
+	}
+	ordered := make([]adminQuestion, 0, len(requested))
+	for position, id := range requested {
+		ordered = append(ordered, adminQuestion{ID: id, Position: position})
+	}
+	unchanged := len(current) == len(ordered)
+	if unchanged {
+		for index := range current {
+			if current[index].ID != ordered[index].ID {
+				unchanged = false
+				break
+			}
+		}
+	}
+	if unchanged {
+		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Порядок вопросов не изменился.", http.StatusConflict)
+		return
+	}
+	if _, err = tx.Exec(ctx, `UPDATE questionnaire_questions SET position=position+1000000
+		WHERE questionnaire_id=$1 AND revision=(SELECT current_revision FROM questionnaires WHERE id=$1)`, questionnaireID); err != nil {
+		a.jamAdminFailure(c, "shift questionnaire positions", err)
+		return
+	}
+	for _, question := range ordered {
+		if _, err = tx.Exec(ctx, `UPDATE questionnaire_questions SET position=$2, updated_at=now() WHERE id=$1`, question.ID, question.Position); err != nil {
+			a.jamAdminFailure(c, "apply questionnaire order", err)
+			return
+		}
+	}
+	before := make([]map[string]any, 0, len(current))
+	for _, question := range current {
+		before = append(before, map[string]any{"id": question.ID, "position": question.Position})
+	}
+	after := make([]map[string]any, 0, len(ordered))
+	for _, question := range ordered {
+		after = append(after, map[string]any{"id": question.ID, "position": question.Position})
+	}
+	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "questionnaire.question_order", "questionnaire_question", questionnaireID, reason, before, after); err != nil {
+		a.jamAdminFailure(c, "audit questionnaire order", err)
+		return
+	}
+	if err = tx.Commit(ctx); err != nil {
+		a.jamAdminFailure(c, "commit questionnaire order", err)
+		return
+	}
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/questionnaire", jamID), "Порядок вопросов обновлён.")
 }
 
 func (a *App) resetQuestionnaireAdmin(c *gin.Context) {
@@ -918,7 +1062,7 @@ func (a *App) resetQuestionnaireAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "commit questionnaire reset", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/questionnaire?reset=1", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/questionnaire", jamID), "Создана новая ревизия анкеты. Исторические ответы сохранены и больше не влияют на допуск.")
 }
 
 func (a *App) renderJamAdmin(c *gin.Context, status int, name string, data jamAdminPageData) {
@@ -984,7 +1128,8 @@ func (a *App) loadAdminJams(ctx context.Context) ([]adminJam, error) {
 	rows, err := a.pool.Query(ctx, `
 		SELECT j.id, j.title, j.description, j.rules, j.visibility, j.submission_starts_at,
 		       j.evaluation_starts_at, j.voting_starts_at, j.finishes_at, j.status_override,
-		       j.max_team_size, count(qn.id)
+		       j.max_team_size, count(qn.id),
+		       (SELECT count(*) FROM jam_themes theme WHERE theme.jam_id=j.id AND theme.withdrawn_at IS NULL)
 		FROM jams j
 		LEFT JOIN questionnaires q ON q.jam_id=j.id
 		LEFT JOIN questionnaire_questions qn ON qn.questionnaire_id=q.id AND qn.revision=q.current_revision
@@ -1019,7 +1164,8 @@ func adminJamSQL(lock bool) string {
 		       j.max_team_size,
 		       (SELECT count(*) FROM questionnaire_questions qn
 		        JOIN questionnaires q ON q.id=qn.questionnaire_id
-		        WHERE q.jam_id=j.id AND qn.revision=q.current_revision)
+		        WHERE q.jam_id=j.id AND qn.revision=q.current_revision),
+		       (SELECT count(*) FROM jam_themes theme WHERE theme.jam_id=j.id AND theme.withdrawn_at IS NULL)
 		FROM jams j WHERE j.id=$1`
 	if lock {
 		query += ` FOR UPDATE`
@@ -1037,7 +1183,7 @@ func scanAdminJam(row rowScanner) (*adminJam, error) {
 	err := row.Scan(&jam.ID, &jam.Title, &jam.Description, &jam.Rules, &jam.Visibility,
 		&jam.Schedule.SubmissionStartsAt, &jam.Schedule.EvaluationStartsAt,
 		&jam.Schedule.VotingStartsAt, &jam.Schedule.FinishesAt, &override,
-		&jam.MaxTeamSize, &jam.QuestionCount)
+		&jam.MaxTeamSize, &jam.QuestionCount, &jam.ThemeCount)
 	if err != nil {
 		return nil, err
 	}

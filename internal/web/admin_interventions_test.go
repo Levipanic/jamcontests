@@ -39,7 +39,7 @@ func TestAdminVoteAndBumpInterventionsAffectAuthoritativeCounts(t *testing.T) {
 	dashboardRequest := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	dashboardRequest.AddCookie(adminSession)
 	router.ServeHTTP(dashboard, dashboardRequest)
-	if dashboard.Code != http.StatusOK || !strings.Contains(dashboard.Body.String(), "Видимость: published") || !strings.Contains(dashboard.Body.String(), "override (voting)") {
+	if dashboard.Code != http.StatusOK || !strings.Contains(dashboard.Body.String(), `badge-published">Опубликован`) || !strings.Contains(dashboard.Body.String(), "override (voting)") {
 		t.Fatalf("admin dashboard omitted lifecycle state: status=%d body=%s", dashboard.Code, dashboard.Body.String())
 	}
 	get := httptest.NewRequest(http.MethodGet, "/admin/jams/"+formatID(fixture.jamID)+"/votes", nil)

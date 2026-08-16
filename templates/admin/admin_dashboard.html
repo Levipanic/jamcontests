@@ -1,2 +1,28 @@
-{{define "admin_dashboard.html"}}<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Администрирование</title><link rel="stylesheet" href="/static/css/font.css"><style>body{max-width:70rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;background:#f2eee4;color:#211}header,section{padding:1.2rem;margin-bottom:1rem;border:1px solid #bbb3a5;background:#fffdf7}nav{display:flex;gap:1rem;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.8rem}.grid div{padding:1rem;border:1px solid #bbb3a5}</style></head><body><header><p>Администратор: {{.User.Username}}</p><h1>Панель управления</h1><nav><a href="/admin">Dashboard</a><a href="/admin/jams">Джемы</a><a href="/admin/users">Пользователи</a><a href="/admin/teams">Команды</a><a href="/admin/audit">Аудит</a></nav></header>
-{{if .Error}}<p>{{.Error}}</p>{{end}}{{if .Jam}}<section><h2>{{.Jam.Title}}</h2><p>Видимость: {{.Jam.Visibility}}. Effective stage: {{.Jam.Stage}}. Режим: {{if .Jam.Schedule.Override}}override ({{.Jam.Schedule.Override}}){{else}}auto{{end}}. {{if .Active}}Опубликованный active jam.{{else}}Последний доступный джем, active отсутствует.{{end}}</p><p>Submission: {{.Jam.SubmissionLocal}}, evaluation: {{.Jam.EvaluationLocal}}, voting: {{.Jam.VotingLocal}}, finish: {{.Jam.FinishesLocal}} (Europe/Moscow).</p><div class="grid"><div>Команды: {{.Counts.Teams}}</div><div>Участники: {{.Counts.Members}}</div><div>Темы: {{.Counts.Themes}}</div><div>Финальные продукты: {{.Counts.FinalProducts}}</div><div>Номинации: {{.Counts.Nominations}}</div><div>Голоса: {{.Counts.Votes}}</div><div>Бампы: {{.Counts.Bumps}}</div></div><nav><a href="/admin/jams/{{.Jam.ID}}/edit">Жизненный цикл</a><a href="/admin/jams/{{.Jam.ID}}/questionnaire">Опросник</a><a href="/admin/jams/{{.Jam.ID}}/themes">Темы</a><a href="/admin/jams/{{.Jam.ID}}/products">Продукты</a><a href="/admin/jams/{{.Jam.ID}}/nominations">Номинации</a><a href="/admin/jams/{{.Jam.ID}}/votes">Голоса</a><a href="/admin/jams/{{.Jam.ID}}/bumps">Бампы</a></nav></section>{{else}}<section><p>Джемов ещё нет.</p><a href="/admin/jams">Открыть список джемов</a></section>{{end}}</body></html>{{end}}
+{{define "admin_dashboard.html"}}
+{{template "admin_head" .}}<title>Обзор | Администрирование</title>
+</head>
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_alerts" .}}
+{{if .Warnings}}<section class="admin-section" aria-label="Предупреждения"><h2>Предупреждения</h2>{{range .Warnings}}<p class="admin-warning">⚠ {{.}}</p>{{end}}</section>{{end}}
+{{if .Jam}}<section class="admin-section"><h2>{{.Jam.Title}}</h2>
+<p>Видимость: <span class="admin-badge badge-{{.Jam.Visibility}}">{{rusVisibility .Jam.Visibility}}</span>. Этап: <span class="admin-badge badge-stage-{{.Jam.Stage}}">{{rusStage .Jam.Stage}}</span>. Режим: {{if .Jam.Schedule.Override}}явный override ({{.Jam.Schedule.Override}}){{else}}автоматический расчёт{{end}}. {{if .Active}}Опубликованный активный джем.{{else}}Активный джем отсутствует.{{end}}</p>
+<p>{{.Jam.SubmissionLocal}} — {{.Jam.EvaluationLocal}} — {{.Jam.VotingLocal}} — {{.Jam.FinishesLocal}} (Europe/Moscow)</p>
+{{if .PublicJamID}}<p>Публичная страница: <a href="/jams/{{.PublicJamID}}">/jams/{{.PublicJamID}}</a></p>{{end}}
+<div class="admin-count-grid"><div>Команды<br><strong>{{.Counts.Teams}}</strong></div><div>Участники<br><strong>{{.Counts.Members}}</strong></div><div>Темы<br><strong>{{.Counts.Themes}}</strong></div><div>Финальные продукты<br><strong>{{.Counts.FinalProducts}}</strong></div><div>Номинации<br><strong>{{.Counts.Nominations}}</strong></div><div>Голоса<br><strong>{{.Counts.Votes}}</strong></div><div>Бампы<br><strong>{{.Counts.Bumps}}</strong></div></div>
+{{template "admin_jam_panel" .}}
+</section>{{else}}<section class="admin-section">{{if .ActiveAbsent}}<p>Опубликованного активного джема нет. Проверьте предупреждения выше.</p>{{else}}<p>Джемов пока нет.</p>{{end}}<p><a href="/admin/jams/new">Создать новый джем</a> или <a href="/admin/jams">открыть список джемов</a>.</p></section>{{end}}
+<section class="admin-section"><h2>Все джемы</h2>
+{{if .Jams}}
+<table class="admin-table">
+<thead><tr><th>ID</th><th>Название</th><th>Видимость</th><th>Этап</th><th>Вопросы</th><th>Темы</th><th>Команды</th><th>Финальные продукты</th><th>Готовность</th><th></th></tr></thead>
+<tbody>
+{{range .Jams}}<tr><td>{{.Jam.ID}}</td><td>{{.Jam.Title}}</td><td><span class="admin-badge badge-{{.Jam.Visibility}}">{{rusVisibility .Jam.Visibility}}</span></td><td><span class="admin-badge badge-stage-{{.Jam.Stage}}">{{rusStage .Jam.Stage}}</span></td><td>{{.Jam.QuestionCount}}</td><td>{{.ThemeCount}}</td><td>{{.TeamCount}}</td><td>{{.FinalProductCount}}</td><td>{{if eq .Jam.Visibility "draft"}}{{if .ReadyToPublish}}<span class="admin-ok">готов</span>{{else}}<span class="admin-warning">не готов</span>{{end}}{{else}}—{{end}}</td><td><a href="/admin/jams/{{.Jam.ID}}/edit">Открыть</a></td></tr>
+{{end}}
+</tbody></table>
+{{else}}<p>Джемов пока нет.</p>{{end}}
+</section>
+</main>
+{{template "admin_footer" .}}
+{{end}}

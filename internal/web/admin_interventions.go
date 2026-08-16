@@ -32,6 +32,7 @@ type adminInterventionData struct {
 	Jam   *adminJam
 	Votes []adminVoteRecord
 	Bumps []adminBumpRecord
+	Pager *adminPager
 }
 
 func (a *App) registerAdminInterventionRoutes(router *gin.Engine) {
@@ -54,19 +55,25 @@ func (a *App) adminVotesPage(c *gin.Context) {
 		a.handleAdminLoadError(c, "load admin votes jam", err)
 		return
 	}
+	page, per := adminPageParam(c)
+	var total int
+	if err = a.pool.QueryRow(c.Request.Context(), `SELECT count(*) FROM nomination_votes WHERE jam_id=$1`, jamID).Scan(&total); err != nil {
+		a.adminInterventionFailure(c, "count admin votes", err)
+		return
+	}
 	rows, err := a.pool.Query(c.Request.Context(), `
 		SELECT vote.id, user_account.username, nomination.title, product.title, team.name,
 		       vote.invalidated_at IS NOT NULL, COALESCE(vote.invalidation_reason, ''), vote.updated_at
 		FROM nomination_votes vote JOIN users user_account ON user_account.id=vote.user_id
 		JOIN nominations nomination ON nomination.id=vote.nomination_id AND nomination.jam_id=vote.jam_id
 		JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
-		JOIN teams team ON team.id=product.team_id WHERE vote.jam_id=$1 ORDER BY nomination.id, vote.id`, jamID)
+		JOIN teams team ON team.id=product.team_id WHERE vote.jam_id=$1 ORDER BY nomination.id, vote.id OFFSET $2 LIMIT $3`, jamID, (page-1)*per, per)
 	if err != nil {
 		a.adminInterventionFailure(c, "load admin votes", err)
 		return
 	}
 	defer rows.Close()
-	data := adminInterventionData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: c.Query("error")}, Jam: jam}
+	data := adminInterventionData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: c.Query("error"), Ok: c.Query("ok")}, Jam: jam, Pager: buildAdminPager(fmt.Sprintf("/admin/jams/%d/votes", jamID), page, per, total)}
 	for rows.Next() {
 		var row adminVoteRecord
 		if err = rows.Scan(&row.ID, &row.Username, &row.NominationTitle, &row.ProductTitle, &row.TeamName, &row.Invalidated, &row.Reason, &row.UpdatedAt); err != nil {
@@ -92,13 +99,19 @@ func (a *App) adminBumpsPage(c *gin.Context) {
 		a.handleAdminLoadError(c, "load admin bumps jam", err)
 		return
 	}
-	rows, err := a.pool.Query(c.Request.Context(), `SELECT bump.id,user_account.username,product.title,team.name,bump.bump_count,bump.invalidated_count,COALESCE(bump.invalidation_reason,''),bump.last_bumped_at FROM product_bumps bump JOIN users user_account ON user_account.id=bump.user_id JOIN products product ON product.id=bump.product_id AND product.jam_id=bump.jam_id JOIN teams team ON team.id=product.team_id WHERE bump.jam_id=$1 ORDER BY product.id,bump.id`, jamID)
+	page, per := adminPageParam(c)
+	var total int
+	if err = a.pool.QueryRow(c.Request.Context(), `SELECT count(*) FROM product_bumps WHERE jam_id=$1`, jamID).Scan(&total); err != nil {
+		a.adminInterventionFailure(c, "count admin bumps", err)
+		return
+	}
+	rows, err := a.pool.Query(c.Request.Context(), `SELECT bump.id,user_account.username,product.title,team.name,bump.bump_count,bump.invalidated_count,COALESCE(bump.invalidation_reason,''),bump.last_bumped_at FROM product_bumps bump JOIN users user_account ON user_account.id=bump.user_id JOIN products product ON product.id=bump.product_id AND product.jam_id=bump.jam_id JOIN teams team ON team.id=product.team_id WHERE bump.jam_id=$1 ORDER BY product.id,bump.id OFFSET $2 LIMIT $3`, jamID, (page-1)*per, per)
 	if err != nil {
 		a.adminInterventionFailure(c, "load admin bumps", err)
 		return
 	}
 	defer rows.Close()
-	data := adminInterventionData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: c.Query("error")}, Jam: jam}
+	data := adminInterventionData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: c.Query("error"), Ok: c.Query("ok")}, Jam: jam, Pager: buildAdminPager(fmt.Sprintf("/admin/jams/%d/bumps", jamID), page, per, total)}
 	for rows.Next() {
 		var row adminBumpRecord
 		if err = rows.Scan(&row.ID, &row.Username, &row.ProductTitle, &row.TeamName, &row.BumpCount, &row.InvalidatedCount, &row.Reason, &row.LastBumpedAt); err != nil {
@@ -221,7 +234,11 @@ func (a *App) adminMutateVote(c *gin.Context, invalidate bool) {
 		a.adminInterventionFailure(c, "commit vote intervention", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/votes", jamID))
+	message := "Голос восстановлен."
+	if invalidate {
+		message = "Голос инвалидирован."
+	}
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/votes", jamID), message)
 }
 
 func (a *App) adminBumpInvalidate(c *gin.Context) { a.adminMutateBump(c, true) }
@@ -291,7 +308,11 @@ func (a *App) adminMutateBump(c *gin.Context, invalidate bool) {
 		a.adminInterventionFailure(c, "commit bump intervention", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/bumps", jamID))
+	message := "Бампы восстановлены."
+	if invalidate {
+		message = "Бампы исключены из публичного счётчика."
+	}
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/bumps", jamID), message)
 }
 
 func adminInterventionIDs(c *gin.Context) (int64, int64, bool) {

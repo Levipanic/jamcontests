@@ -1,1 +1,19 @@
-{{define "admin_votes.html"}}<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Голоса | {{.Jam.Title}}</title><link rel="stylesheet" href="/static/css/font.css"><style>body{max-width:70rem;margin:2rem auto;padding:0 1rem;font:15px/1.5 "Cutive Mono","Courier New",monospace;background:#f2eee4;color:#211}article{padding:1rem;margin:1rem 0;border:1px solid #bbb3a5;background:#fffdf7}.danger{color:#8d1111}</style></head><body><p><a href="/admin">← Dashboard</a></p><h1>Голоса: {{.Jam.Title}}</h1>{{if .Error}}<p>{{.Error}}</p>{{end}}{{range .Votes}}<article><p>#{{.ID}} · {{.Username}} · {{.NominationTitle}} → {{.ProductTitle}} / {{.TeamName}}</p>{{if .Invalidated}}<p class="danger">Инвалидирован: {{.Reason}}</p><form method="post" action="/admin/jams/{{$.Jam.ID}}/votes/{{.ID}}/restore"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input name="reason" required placeholder="Причина"><label><input type="checkbox" name="confirm" value="restore" required> Подтверждаю восстановление</label><button>Восстановить</button></form>{{else}}<form method="post" action="/admin/jams/{{$.Jam.ID}}/votes/{{.ID}}/invalidate"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input name="reason" required placeholder="Причина"><label><input type="checkbox" name="confirm" value="invalidate" required> Подтверждаю инвалидацию</label><button class="danger">Инвалидировать</button></form>{{end}}</article>{{else}}<p>Голосов нет.</p>{{end}}</body></html>{{end}}
+{{define "admin_votes.html"}}
+{{template "admin_head" .}}<title>Голоса | {{.Jam.Title}}</title>
+</head>
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_jam_panel" .}}
+{{template "admin_alerts" .}}
+<section class="admin-section"><h2>Голоса</h2>
+{{if .Votes}}{{range .Votes}}<article class="admin-card">
+<p>#{{.ID}} · {{.Username}} · {{.NominationTitle}} → {{.ProductTitle}} / {{.TeamName}}</p>
+{{if .Invalidated}}<p class="admin-warning">Инвалидирован: {{.Reason}}</p><form class="admin-form" method="post" action="/admin/jams/{{$.Jam.ID}}/votes/{{.ID}}/restore"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина <input name="reason" required placeholder="Причина"></label><label class="admin-check"><input type="checkbox" name="confirm" value="restore" required> Подтверждаю восстановление</label><button type="submit">Восстановить</button></form>{{else}}<form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{$.Jam.ID}}/votes/{{.ID}}/invalidate"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина <input name="reason" required placeholder="Причина"></label><label class="admin-check"><input type="checkbox" name="confirm" value="invalidate" required> Подтверждаю инвалидацию</label><button class="admin-danger" type="submit">Инвалидировать</button></form>{{end}}
+</article>{{end}}
+{{template "admin_pager" .}}
+{{else}}<p>Голосов нет.</p>{{end}}
+</section>
+</main>
+{{template "admin_footer" .}}
+{{end}}

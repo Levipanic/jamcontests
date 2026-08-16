@@ -1,21 +1,17 @@
-{{define "admin_jams.html"}}<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Джемы | Администрирование</title><link rel="stylesheet" href="/static/css/font.css">
-  <style>
-    body{max-width:70rem;margin:2rem auto;padding:0 1rem;font:16px/1.5 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}a{color:#741d1d}header,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.25rem;margin-bottom:1rem}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.55rem;border-bottom:1px solid #ddd}.stamp{font-family:"Cutive Mono","Courier New",monospace;text-transform:uppercase}.error{color:#8d1111;font-weight:bold}
-  </style>
+{{define "admin_jams.html"}}
+{{template "admin_head" .}}<title>Джемы | Администрирование</title>
 </head>
 <body>
-<header><p class="stamp">Архив / управление</p><h1>Джемы</h1><p>Администратор: {{.User.Username}}</p><nav><a href="/admin">Dashboard</a> · <a href="/admin/jams/new">Создать draft-джем</a> · <a href="/admin/teams">Команды</a> · <a href="/admin/users">Пользователи</a> · <a href="/admin/audit">Аудит</a></nav>{{if .Development}}<form method="post" action="/admin/demo"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Создать и опубликовать тестовый джем</button></form>{{end}}</header>
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-<section>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_alerts" .}}
+<section class="admin-section"><div class="admin-toolbar"><h2>Джемы</h2>{{if .Development}}<form method="post" action="/admin/demo"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Создать и опубликовать тестовый джем</button></form>{{end}}<a class="admin-action" href="/admin/jams/new">Создать draft-джем</a></div>
 {{if .Jams}}
-<table><thead><tr><th>ID</th><th>Название</th><th>Видимость</th><th>Стадия</th><th>Вопросы</th><th></th></tr></thead><tbody>
-{{range .Jams}}<tr><td>{{.ID}}</td><td>{{.Title}}</td><td>{{.Visibility}}</td><td>{{.Stage}}</td><td>{{.QuestionCount}}</td><td><a href="/admin/jams/{{.ID}}/edit">Открыть</a></td></tr>{{end}}
+<table class="admin-table"><thead><tr><th>ID</th><th>Название</th><th>Видимость</th><th>Стадия</th><th>Вопросы</th><th>Темы</th><th></th></tr></thead><tbody>
+{{range .Jams}}<tr><td>{{.ID}}</td><td>{{.Title}}</td><td><span class="admin-badge badge-{{.Visibility}}">{{rusVisibility .Visibility}}</span></td><td><span class="admin-badge badge-stage-{{.Stage}}">{{rusStage .Stage}}</span></td><td>{{.QuestionCount}}</td><td>{{.ThemeCount}}</td><td><a href="/admin/jams/{{.ID}}/edit">Открыть</a></td></tr>{{end}}
 </tbody></table>
 {{else}}<p>Джемов пока нет.</p>{{end}}
 </section>
-</body></html>{{end}}
+</main>
+{{template "admin_footer" .}}
+{{end}}

@@ -127,7 +127,7 @@ func (a *App) adminThemeCopy(c *gin.Context) {
 		a.themeAdminFailure(c, "commit theme copy", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/themes", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/themes", jamID), "Тема скопирована независимой записью.")
 }
 
 func (a *App) adminThemeInsert(c *gin.Context, jamID int64, phrase string, copiedFromID int64, reason string) {
@@ -150,7 +150,7 @@ func (a *App) adminThemeInsert(c *gin.Context, jamID int64, phrase string, copie
 		a.themeAdminFailure(c, "commit theme creation", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/themes", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/themes", jamID), "Тема добавлена.")
 }
 
 func (a *App) insertThemeTx(c *gin.Context, tx pgx.Tx, jamID int64, phrase string, copiedFromID int64, reason string) error {
@@ -237,7 +237,7 @@ func (a *App) adminThemeEdit(c *gin.Context) {
 		a.themeAdminFailure(c, "commit theme edit", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/themes", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/themes", jamID), "Формулировка темы обновлена.")
 }
 
 func (a *App) adminThemeWithdraw(c *gin.Context) {
@@ -316,7 +316,7 @@ func (a *App) adminThemeWithdraw(c *gin.Context) {
 		a.themeAdminFailure(c, "commit theme withdrawal", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/themes", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/themes", jamID), "Тема отозвана, историческая запись сохранена.")
 }
 
 func (a *App) adminTeamThemeSelect(c *gin.Context) {
@@ -396,7 +396,7 @@ func (a *App) adminTeamThemeSelect(c *gin.Context) {
 		a.themeAdminFailure(c, "commit team theme intervention", err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/admin/jams/%d/themes", jamID))
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/themes", jamID), "Тема команды переназначена.")
 }
 
 func (a *App) teamThemeSelect(c *gin.Context) {
@@ -531,7 +531,7 @@ func (a *App) renderAdminThemes(c *gin.Context, jamID int64, message string, sta
 		a.themeAdminFailure(c, "iterate team theme selections", err)
 		return
 	}
-	c.HTML(status, "admin_themes.html", adminThemesPageData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message}, Jam: jam, Themes: themes, TeamSelections: selections})
+	c.HTML(status, "admin_themes.html", adminThemesPageData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message, Ok: c.Query("ok")}, Jam: jam, Themes: themes, TeamSelections: selections})
 }
 
 func validateThemePhrase(raw string) (string, error) {

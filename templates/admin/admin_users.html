@@ -1,11 +1,17 @@
-{{define "admin_users.html"}}<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Пользователи | Администрирование</title>
-<link rel="stylesheet" href="/static/css/font.css"><style>body{max-width:75rem;margin:2rem auto;padding:0 1rem;font:16px/1.45 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}header,section{background:#fffdf7;border:1px solid #bbb3a5;padding:1.2rem;margin-bottom:1rem}nav a{margin-right:1rem;color:#741d1d}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;padding:.6rem;border-bottom:1px solid #ddd}form{display:flex;gap:.4rem;flex-wrap:wrap}input{min-width:14rem}.error{color:#8d1111;font-weight:bold}</style>
-</head><body>
-<header><h1>Пользователи</h1><nav><a href="/admin">Dashboard</a><a href="/admin/jams">Джемы</a><a href="/admin/teams">Команды</a><a href="/admin/audit">Аудит</a></nav><form method="get"><label>Поиск <input name="q" value="{{.Search}}" maxlength="254"></label><button type="submit">Найти</button></form></header>
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-<section>{{if .Users}}<table><thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Роль</th><th>Изменить роль</th></tr></thead><tbody>
-{{range .Users}}<tr><td>{{.ID}}</td><td><a href="/admin/users/{{.ID}}">{{.Username}}</a></td><td>{{if .Email}}{{.Email}}{{else}}не указан{{end}}</td><td>{{.Role}}</td><td><a href="/admin/users/{{.ID}}">Открыть</a></td></tr>{{end}}
-</tbody></table>{{else}}<p>Пользователей нет.</p>{{end}}</section>
-</body></html>{{end}}
+{{define "admin_users.html"}}
+{{template "admin_head" .}}<title>Пользователи | Администрирование</title>
+</head>
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_alerts" .}}
+<section class="admin-section"><div class="admin-toolbar"><h2>Пользователи</h2><form class="admin-filter" method="get"><input name="q" value="{{.Search}}" maxlength="254" placeholder="username, email или ID"><button type="submit">Найти</button></form></div>
+{{if .Users}}
+<table class="admin-table"><thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Роль</th><th></th></tr></thead><tbody>
+{{range .Users}}<tr><td>{{.ID}}</td><td><a href="/admin/users/{{.ID}}">{{.Username}}</a></td><td>{{if .Email}}{{.Email}}{{else}}не указан{{end}}</td><td>{{if eq .Role "admin"}}<span class="admin-badge badge-danger">admin</span>{{else}}<span class="admin-badge">user</span>{{end}}</td><td><a href="/admin/users/{{.ID}}">Открыть</a></td></tr>{{end}}
+</tbody></table>
+{{template "admin_pager" .}}
+{{else}}<p>Пользователей нет.</p>{{end}}</section>
+</main>
+{{template "admin_footer" .}}
+{{end}}

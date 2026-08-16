@@ -44,6 +44,7 @@ type PageData struct {
 	User             *User
 	CSRFToken        string
 	Error            string
+	Ok               string
 	AuthOpen         bool
 	AuthMode         string
 	AuthUsername     string
@@ -146,9 +147,9 @@ func loadTemplates(root string) (*template.Template, error) {
 		return nil, err
 	}
 	if len(paths) == 0 {
-		return template.New("root").Parse(fallbackTemplates)
+		return template.New("root").Funcs(templateFuncs()).Parse(fallbackTemplates)
 	}
-	return template.New("root").ParseFiles(paths...)
+	return template.New("root").Funcs(templateFuncs()).ParseFiles(paths...)
 }
 
 func (a *App) recovery() gin.HandlerFunc {

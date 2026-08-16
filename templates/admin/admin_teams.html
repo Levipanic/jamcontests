@@ -1,23 +1,27 @@
-{{define "admin_teams.html"}}<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Команды | Администрирование</title>
-<link rel="stylesheet" href="/static/css/font.css"><style>body{max-width:80rem;margin:2rem auto;padding:0 1rem;font:16px/1.45 "Cutive Mono","Courier New",monospace;color:#211;background:#f2eee4}header,article{background:#fffdf7;border:1px solid #bbb3a5;padding:1.2rem;margin-bottom:1rem}nav a,a{margin-right:1rem;color:#741d1d}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1rem}.box{border-top:1px solid #ddd;padding-top:.8rem}form{display:grid;gap:.45rem;margin:.7rem 0}input,textarea,select,button{font:inherit;padding:.35rem}ul{padding-left:1.2rem}.inline{display:inline}.danger{color:#8d1111}.error{color:#8d1111;font-weight:bold}img{max-width:8rem;max-height:8rem}</style>
-</head><body>
-<header><h1>Команды</h1><nav><a href="/admin">Джемы</a><a href="/admin/users">Пользователи</a><a href="/admin/teams">Команды</a><a href="/admin/audit">Аудит</a></nav></header>
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-{{if .Teams}}{{range .Teams}}{{$team := .}}<article>
-<h2>{{.Name}} <small>#{{.ID}}</small></h2><p>Джем: {{.JamTitle}} (#{{.JamID}}). Капитан: {{.CaptainName}}. Мест: {{len .Members}} / {{.MaxSize}}. Приглашение: {{.InviteState}}.</p>
-<p>Eligibility: completed response = {{.CompletedEligible}}; override = {{if .EligibilityOverride}}{{.EligibilityOverride}}{{else}}нет{{end}}.</p>
-{{if .AvatarPath}}<p><img src="/avatars/{{.AvatarPath}}" alt="Аватар команды"></p>{{end}}
-<div class="grid">
-<section class="box"><h3>Профиль</h3><form method="post" action="/admin/teams/{{.ID}}/profile"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Название <input name="name" value="{{.Name}}" required minlength="2" maxlength="100"></label><label>Описание <textarea name="description" maxlength="3000">{{.Description}}</textarea></label><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button type="submit">Сохранить профиль</button></form>
-{{if .AvatarPath}}<form method="post" action="/admin/teams/{{.ID}}/avatar/remove"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button class="danger" type="submit">Удалить аватар</button></form>{{end}}</section>
-<section class="box"><h3>Участники</h3><ul>{{range .Members}}<li>{{.Username}} (#{{.ID}}){{if .Captain}} — капитан{{end}}</li>{{end}}</ul>
-<form method="post" action="/admin/teams/{{.ID}}/members/add"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input name="username" required placeholder="Username"><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button type="submit">Добавить участника</button></form>
-{{range .Members}}{{if not .Captain}}<form method="post" action="/admin/teams/{{$team.ID}}/members/{{.ID}}/remove"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина удаления {{.Username}}"><button class="danger" type="submit">Удалить {{.Username}}</button></form>{{end}}{{end}}</section>
-<section class="box"><h3>Капитан</h3><form method="post" action="/admin/teams/{{.ID}}/captain"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><select name="user_id">{{range .Members}}<option value="{{.ID}}"{{if .Captain}} selected{{end}}>{{.Username}}</option>{{end}}</select><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button type="submit">Назначить капитана</button></form></section>
-<section class="box"><h3>Доступ</h3>{{if eq .InviteState "active"}}<form method="post" action="/admin/teams/{{.ID}}/invite/revoke"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button class="danger" type="submit">Отозвать приглашение</button></form>{{end}}
-<form method="post" action="/admin/teams/{{.ID}}/eligibility"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="allowed" value="true"><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button type="submit">Установить eligibility override</button></form>
-{{if .EligibilityOverride}}<form method="post" action="/admin/teams/{{.ID}}/eligibility"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input name="reason" required minlength="3" maxlength="1000" placeholder="Причина"><button class="danger" type="submit">Удалить eligibility override</button></form>{{end}}</section>
-</div></article>{{end}}{{else}}<article><p>Команд пока нет.</p></article>{{end}}
-</body></html>{{end}}
+{{define "admin_teams.html"}}
+{{template "admin_head" .}}<title>Команды | Администрирование</title>
+</head>
+<body>
+{{template "admin_header" .}}
+<main class="admin-main">
+{{template "admin_alerts" .}}
+<section class="admin-section"><div class="admin-toolbar"><h2>Команды</h2><form class="admin-filter" method="get"><label>Джем <select name="jam" onchange="this.form.submit()"><option value="">Все джемы</option>{{range .Jams}}<option value="{{.ID}}"{{if eq $.JamFilter .ID}} selected{{end}}>{{.Title}}</option>{{end}}</select></label><button type="submit">Фильтр</button></form></div>
+{{if .Teams}}{{range .Teams}}{{$team := .}}<article class="admin-card">
+<h2>{{.Name}} <small>#{{.ID}}</small></h2><p>Джем: {{.JamTitle}} (#{{.JamID}}). Капитан: {{.CaptainName}}. Мест: {{len .Members}} / {{.MaxSize}}. Приглашение: {{rusInviteState .InviteState}}.</p>
+<p>Eligibility: completed response = <span class="admin-badge">{{.CompletedEligible}}</span>; override = {{if .EligibilityOverride}}<span class="admin-badge badge-danger">{{.EligibilityOverride}}</span>{{else}}нет{{end}}.</p>
+{{if .AvatarPath}}<p><img class="admin-avatar" src="/avatars/{{.AvatarPath}}" alt="Аватар команды"></p>{{end}}
+<div class="admin-grid">
+<section class="admin-box"><h3>Профиль</h3><form class="admin-form" method="post" action="/admin/teams/{{.ID}}/profile"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Название <input name="name" value="{{.Name}}" required minlength="2" maxlength="100"></label><label>Описание <textarea name="description" maxlength="3000">{{.Description}}</textarea></label><label>Причина <input name="reason" required minlength="3" maxlength="1000"></label><button type="submit">Сохранить профиль</button></form>
+{{if .AvatarPath}}<form class="admin-form" method="post" action="/admin/teams/{{.ID}}/avatar/remove"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина <input name="reason" required minlength="3" maxlength="1000"></label><button class="admin-danger" type="submit">Удалить аватар</button></form>{{end}}</section>
+<section class="admin-box"><h3>Участники</h3><ul class="admin-list">{{range .Members}}<li>{{.Username}} (#{{.ID}}){{if .Captain}} <span class="admin-badge">капитан</span>{{end}}</li>{{end}}</ul>
+<form class="admin-form" method="post" action="/admin/teams/{{.ID}}/members/add"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Username <input name="username" required placeholder="username"></label><label>Причина <input name="reason" required minlength="3" maxlength="1000"></label><button type="submit">Добавить участника</button></form>
+{{range .Members}}{{if not .Captain}}<form class="admin-form admin-danger-block" method="post" action="/admin/teams/{{$team.ID}}/members/{{.ID}}/remove"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина удаления {{.Username}} <input name="reason" required minlength="3" maxlength="1000"></label><button class="admin-danger" type="submit">Удалить {{.Username}}</button></form>{{end}}{{end}}</section>
+<section class="admin-box"><h3>Капитан</h3><form class="admin-form" method="post" action="/admin/teams/{{.ID}}/captain"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Новый капитан <select name="user_id">{{range .Members}}<option value="{{.ID}}"{{if .Captain}} selected{{end}}>{{.Username}}</option>{{end}}</select></label><label>Причина <input name="reason" required minlength="3" maxlength="1000"></label><button type="submit">Назначить капитана</button></form></section>
+<section class="admin-box"><h3>Доступ</h3>{{if eq .InviteState "active"}}<form class="admin-form admin-danger-block" method="post" action="/admin/teams/{{.ID}}/invite/revoke"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина <input name="reason" required minlength="3" maxlength="1000"></label><button class="admin-danger" type="submit">Отозвать приглашение</button></form>{{end}}
+<form class="admin-form" method="post" action="/admin/teams/{{.ID}}/eligibility"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="allowed" value="true"><label>Причина <input name="reason" required minlength="3" maxlength="1000"></label><button type="submit">Установить eligibility override</button></form>
+{{if .EligibilityOverride}}<form class="admin-form admin-danger-block" method="post" action="/admin/teams/{{.ID}}/eligibility"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина <input name="reason" required minlength="3" maxlength="1000"></label><button class="admin-danger" type="submit">Удалить eligibility override</button></form>{{end}}</section>
+</div></article>{{end}}{{else}}<p>Команд пока нет.</p>{{end}}
+</section>
+</main>
+{{template "admin_footer" .}}
+{{end}}
