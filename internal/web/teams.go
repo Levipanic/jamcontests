@@ -54,6 +54,7 @@ type teamDetailView struct {
 	CanEditProduct  bool
 	ProductID       int64
 	PublicProductID string
+	ProductStatus   string
 }
 
 type teamPageView struct {
@@ -63,6 +64,7 @@ type teamPageView struct {
 	Team        teamDetailView
 	JamID       int64
 	PublicJamID string
+	Rules       string
 }
 
 type teamInviteView struct {
@@ -124,7 +126,13 @@ func (a *App) teamNewPage(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	a.teamRender(c, http.StatusOK, "team_new.html", teamPageView{JamID: jamID, PublicJamID: publicJamID, Error: c.Query("error")})
+	var rules string
+	if err = a.pool.QueryRow(c.Request.Context(), `SELECT rules FROM jams WHERE id=$1`, jamID).Scan(&rules); err != nil {
+		a.logger.Error("load jam rules for team form", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	a.teamRender(c, http.StatusOK, "team_new.html", teamPageView{JamID: jamID, PublicJamID: publicJamID, Rules: rules, Error: c.Query("error")})
 }
 
 func (a *App) teamCreate(c *gin.Context) {
@@ -176,6 +184,17 @@ func (a *App) teamCreate(c *gin.Context) {
 	}
 	if !manageable {
 		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Создание команд на этом джеме закрыто.")
+		return
+	}
+
+	var jamRules string
+	if err = tx.QueryRow(ctx, `SELECT rules FROM jams WHERE id=$1`, jamID).Scan(&jamRules); err != nil {
+		a.logger.Error("load jam rules for team creation", "error", err)
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Не удалось создать команду. Попробуйте позже.")
+		return
+	}
+	if strings.TrimSpace(jamRules) != "" && c.PostForm("rules_confirmed") != "yes" {
+		teamRedirectError(c, fmt.Sprintf("/jams/%s/teams/new", publicJamID), "Подтвердите, что ознакомлены с правилами проведения джема.")
 		return
 	}
 
@@ -276,8 +295,16 @@ func (a *App) teamDetail(c *gin.Context) {
 	view.CanManage = view.IsCaptain && CanManageTeam(stage)
 	view.CanLeave = view.IsMember && !view.IsCaptain && CanManageTeam(stage)
 	view.CanEditProduct = stage == StageSubmission && view.IsMember && (view.IsCaptain || viewerProductEditor)
+	if view.IsMember {
+		err = a.pool.QueryRow(ctx, `SELECT status FROM products WHERE team_id=$1 AND jam_id=$2`, teamID, view.JamID).Scan(&view.ProductStatus)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			a.logger.Error("load team product status", "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+	}
 	if canDiscloseProducts(stage) {
-		err = a.pool.QueryRow(ctx, `SELECT id, public_id FROM products WHERE team_id=$1 AND jam_id=$2 AND status='final'`, teamID, view.JamID).Scan(&view.ProductID, &view.PublicProductID)
+		err = a.pool.QueryRow(ctx, `SELECT id, public_id FROM products WHERE team_id=$1 AND jam_id=$2 AND `+productDisclosedClause("products", stage), teamID, view.JamID).Scan(&view.ProductID, &view.PublicProductID)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			a.logger.Error("load disclosed team product", "error", err)
 			c.AbortWithStatus(http.StatusInternalServerError)

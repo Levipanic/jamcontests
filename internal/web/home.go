@@ -60,6 +60,23 @@ func (a *App) populateJamPage(c *gin.Context, data *PageData) error {
 			data.Themes = themes
 			data.ThemeConfigError = len(themes) == 0
 		}
+		if jam.Stage == StageEvaluation || jam.Stage == StageVoting || jam.Stage == StageFinished {
+			products, err := a.loadPublicProducts(c.Request.Context(), jam.ID, jam.PublicID, jam.Stage)
+			if err != nil {
+				return err
+			}
+			data.Products = products
+		}
+		if jam.Stage == StageFinished {
+			results, err := a.loadPublicNominations(c.Request.Context(), jam.ID, StageFinished)
+			if err != nil {
+				return err
+			}
+			if err = a.populateFinishedResults(c.Request.Context(), jam.ID, results); err != nil {
+				return err
+			}
+			data.Results = results
+		}
 	}
 	if data.User != nil {
 		profile, err := a.loadProfile(c.Request.Context(), data.User, jam)
@@ -67,12 +84,22 @@ func (a *App) populateJamPage(c *gin.Context, data *PageData) error {
 			return err
 		}
 		data.Profile = profile
-		if jam != nil && StageAtLeast(jam.Stage, StageSubmission) && profile.TeamID != 0 {
-			selected, err := a.loadTeamTheme(c.Request.Context(), profile.TeamID)
-			if err != nil {
-				return err
+		if jam != nil {
+			if StageAtLeast(jam.Stage, StageSubmission) && profile.TeamID != 0 {
+				selected, err := a.loadTeamTheme(c.Request.Context(), profile.TeamID)
+				if err != nil {
+					return err
+				}
+				data.SelectedTheme = selected
 			}
-			data.SelectedTheme = selected
+			if profile.TeamID != 0 {
+				var status string
+				err = a.pool.QueryRow(c.Request.Context(), `SELECT status FROM products WHERE team_id=$1 AND jam_id=$2`, profile.TeamID, jam.ID).Scan(&status)
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					return err
+				}
+				data.OwnProductStatus = status
+			}
 		}
 	}
 	return nil

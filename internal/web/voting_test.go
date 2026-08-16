@@ -49,7 +49,7 @@ func TestVoteMutationUsesDatabaseRules(t *testing.T) {
 		"ON CONFLICT (user_id, nomination_id) WHERE invalidated_at IS NULL DO UPDATE",
 		"RETURNING nomination_id, product_id",
 		"nomination.withdrawn_at IS NULL",
-		"product.status='final'",
+		"product.status IN ('final', 'draft')",
 		"FROM team_members",
 		"status_override='voting'",
 		"clock_timestamp() >= voting_starts_at AND clock_timestamp() < finishes_at",

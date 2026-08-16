@@ -6,7 +6,7 @@
 <main class="admin-main">
 {{template "admin_jam_panel" .}}
 {{template "admin_alerts" .}}
-<section class="admin-section"><h2>Темы</h2><p class="admin-help">Публичное содержание темы состоит только из формулировки. Отзыв сохраняет историческую запись.</p>
+<section class="admin-section"><h2>Темы</h2><p class="admin-help">Публичное содержание темы состоит только из формулировки. Темы формулируются на основе ответов участников: откройте <a href="/admin/jams/{{.Jam.ID}}/questionnaire/reports">ответы анкеты</a>, соберите отобранные формулировки и добавьте их сюда до начала приёма работ. Отзыв сохраняет историческую запись.</p>
 {{if .Themes}}{{range .Themes}}<article class="admin-card {{if .Withdrawn}}admin-withdrawn{{end}}"><h3>№ {{.ID}} · {{.Phrase}}</h3>
 <p class="admin-meta">{{if .Withdrawn}}отозвана{{else}}активна{{end}} · выборов командами: {{.SelectedCount}}{{if .CopiedFromThemeID}} · скопирована из № {{.CopiedFromThemeID}}{{end}}</p>
 {{if not .Withdrawn}}<form class="admin-form admin-grid2" method="post" action="/admin/jams/{{$.Jam.ID}}/themes/{{.ID}}/edit"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Новая формулировка <input name="phrase" maxlength="160" value="{{.Phrase}}" required></label><label>Причина <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Сохранить</button></form>

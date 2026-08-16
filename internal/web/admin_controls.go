@@ -85,6 +85,7 @@ type adminControlTeam struct {
 	MaxSize             int
 	InviteState         string
 	EligibilityOverride *bool
+	OverrideMeta        string
 	CompletedEligible   bool
 	Members             []adminControlMember
 }
@@ -697,7 +698,7 @@ func (a *App) loadAdminControlTeams(ctx context.Context, jamFilter int64) ([]adm
 		SELECT t.id, t.jam_id, j.title, t.name, t.description, t.avatar_path,
 		       t.captain_user_id, captain.username, j.max_team_size,
 		       CASE WHEN i.team_id IS NULL THEN 'none' WHEN i.revoked_at IS NULL THEN 'active' ELSE 'revoked' END,
-		       eo.allowed,
+		       eo.allowed, COALESCE(override_admin.username, ''), COALESCE(eo.updated_at, eo.created_at),
 		       EXISTS (
 		           SELECT 1 FROM team_members em
 		           JOIN questionnaires q ON q.jam_id=em.jam_id
@@ -710,6 +711,7 @@ func (a *App) loadAdminControlTeams(ctx context.Context, jamFilter int64) ([]adm
 		JOIN users captain ON captain.id=t.captain_user_id
 		LEFT JOIN team_invites i ON i.team_id=t.id
 		LEFT JOIN team_eligibility_overrides eo ON eo.team_id=t.id
+		LEFT JOIN users override_admin ON override_admin.id=eo.admin_user_id
 		WHERE $1=0 OR t.jam_id=$1
 		ORDER BY j.created_at DESC, lower(t.name), t.id`, jamFilter)
 	if err != nil {
@@ -720,10 +722,26 @@ func (a *App) loadAdminControlTeams(ctx context.Context, jamFilter int64) ([]adm
 	teamByID := make(map[int64]int)
 	for rows.Next() {
 		var team adminControlTeam
+		var overrideAdmin string
+		var overrideAt *time.Time
 		if err := rows.Scan(&team.ID, &team.JamID, &team.JamTitle, &team.Name, &team.Description,
 			&team.AvatarPath, &team.CaptainID, &team.CaptainName, &team.MaxSize,
-			&team.InviteState, &team.EligibilityOverride, &team.CompletedEligible); err != nil {
+			&team.InviteState, &team.EligibilityOverride, &overrideAdmin, &overrideAt,
+			&team.CompletedEligible); err != nil {
 			return nil, err
+		}
+		if team.EligibilityOverride != nil && *team.EligibilityOverride {
+			team.OverrideMeta = "установлен администратором"
+			if overrideAdmin != "" {
+				team.OverrideMeta += " " + overrideAdmin
+			}
+			if overrideAt != nil {
+				location, locationErr := time.LoadLocation("Europe/Moscow")
+				if locationErr != nil {
+					location = time.FixedZone("Europe/Moscow", 3*60*60)
+				}
+				team.OverrideMeta += " (" + overrideAt.In(location).Format("02.01.2006 15:04 МСК") + ")"
+			}
 		}
 		teams = append(teams, team)
 		teamByID[team.ID] = len(teams) - 1

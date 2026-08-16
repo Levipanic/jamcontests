@@ -70,7 +70,7 @@ func (a *App) productBumps(c *gin.Context) {
 		JOIN jams jam ON jam.id=product.jam_id AND jam.visibility='published'
 		LEFT JOIN product_bumps own_bump ON own_bump.product_id=product.id
 		    AND own_bump.user_id=$2::bigint
-		WHERE product.id=$1 AND product.status='final'
+		WHERE product.id=$1 AND product.status IN ('final', 'draft')
 		  AND CASE
 		      WHEN jam.status_override IS NOT NULL
 		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
@@ -125,7 +125,7 @@ func (a *App) bumpProduct(c *gin.Context) {
 		       END
 		FROM products product
 		JOIN jams jam ON jam.id=product.jam_id AND jam.visibility='published'
-		WHERE product.id=$1 AND product.status='final'
+		WHERE product.id=$1 AND product.status IN ('final', 'draft')
 		FOR SHARE OF jam`, productID).Scan(&jamID, &stageValue)
 	stage := Stage(stageValue)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && !canDiscloseBumps(stage) {
@@ -157,7 +157,7 @@ func (a *App) bumpProduct(c *gin.Context) {
 		SELECT $1, product.id, product.jam_id, 1, clock_timestamp()
 		FROM products product
 		JOIN jams jam ON jam.id=product.jam_id AND jam.visibility='published'
-		WHERE product.id=$2 AND product.jam_id=$3 AND product.status='final'
+		WHERE product.id=$2 AND product.jam_id=$3 AND product.status IN ('final', 'draft')
 		  AND CASE
 		      WHEN jam.status_override IS NOT NULL
 		          THEN jam.status_override IN ('evaluation', 'voting')
@@ -261,7 +261,7 @@ func loadDisclosedBumpState(ctx context.Context, queryer bumpQueryer, productID,
 		FROM products product
 		JOIN jams jam ON jam.id=product.jam_id AND jam.visibility='published'
 		LEFT JOIN product_bumps own_bump ON own_bump.product_id=product.id AND own_bump.user_id=$2
-		WHERE product.id=$1 AND product.status='final'
+		WHERE product.id=$1 AND product.status IN ('final', 'draft')
 		  AND CASE
 		      WHEN jam.status_override IS NOT NULL THEN jam.status_override IN ('evaluation', 'voting', 'finished')
 		      ELSE clock_timestamp() >= jam.evaluation_starts_at

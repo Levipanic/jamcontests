@@ -110,9 +110,9 @@ func (a *App) vote(c *gin.Context) {
 		JOIN products nomination_product
 		  ON nomination_product.id=CASE WHEN nomination.kind='team' THEN nomination.product_id ELSE product.id END
 		 AND nomination_product.jam_id=nomination.jam_id
-		 AND nomination_product.status='final'
+		 AND nomination_product.status IN ('final', 'draft')
 		WHERE nomination.id=$2 AND nomination.jam_id=$1
-		  AND nomination.withdrawn_at IS NULL AND product.status='final'
+		  AND nomination.withdrawn_at IS NULL AND product.status IN ('final', 'draft')
 		FOR SHARE OF nomination, product, product_team, nomination_product`, jamID, nominationID, productID).Scan(&productTeamID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		voteUnavailable(c)
@@ -215,11 +215,11 @@ func (a *App) voteCounts(c *gin.Context) {
 			      SELECT 1 FROM products author_product
 			      WHERE author_product.id=nomination.product_id
 			        AND author_product.jam_id=nomination.jam_id
-			        AND author_product.status='final'
+			        AND author_product.status IN ('final', 'draft')
 			  ))
 		), public_products AS (
 			SELECT product.id, product.public_id FROM products product
-			WHERE product.jam_id=$1 AND product.status='final'
+			WHERE product.jam_id=$1 AND product.status IN ('final', 'draft')
 		)
 		SELECT nomination.public_id, product.public_id, count(vote.user_id)::bigint
 		FROM public_nominations nomination

@@ -7,7 +7,7 @@
 {{template "admin_alerts" .}}
 {{if .Jam}}{{template "admin_jam_panel" .}}{{end}}
 <section class="admin-section"><h2>{{if .Jam}}Редактирование: {{.Jam.Title}}{{else}}Новый draft-джем{{end}}</h2>
-{{if not .Jam}}<p class="admin-help">После создания добавьте хотя бы один вопрос анкеты, затем вернитесь сюда и опубликуйте джем.</p>{{end}}
+{{if not .Jam}}<p class="admin-help">После создания добавьте хотя бы один вопрос анкеты, затем опубликуйте джем. Темы формулируются на основе ответов участников и добавляются позже — обязательны только к началу приёма работ.</p>{{end}}
 {{if .Jam}}<p class="admin-meta">ID {{.Jam.ID}} · {{.Jam.Visibility}} · effective stage: {{rusStage .Jam.Stage}} · вопросов: {{.Jam.QuestionCount}} · тем: {{.Jam.ThemeCount}}</p>{{end}}
 <form class="admin-form" method="post" action="{{if .Jam}}/admin/jams/{{.Jam.ID}}/edit{{else}}/admin/jams/new{{end}}">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -15,7 +15,7 @@
 <label>Описание <textarea name="description" maxlength="10000">{{.JamForm.Description}}</textarea></label>
 <label>Правила <textarea name="rules" maxlength="20000">{{.JamForm.Rules}}</textarea></label>
 <fieldset class="admin-fieldset"><legend>Расписание, Europe/Moscow</legend>
-<p class="admin-help">Время задаётся и отображается в Europe/Moscow. Хранится как абсолютный момент времени (timestamptz).</p>
+<p class="admin-help">Время задаётся и отображается в Europe/Moscow. Хранится как абсолютный момент времени (timestamptz). Порядок строгий: начало сдачи &lt; начало оценки &lt; начало голосования &lt; завершение.</p>
 <label>Начало submission <input type="datetime-local" name="submission_starts_at" required value="{{.JamForm.SubmissionStarts}}"></label>
 <label>Начало evaluation <input type="datetime-local" name="evaluation_starts_at" required value="{{.JamForm.EvaluationStarts}}"></label>
 <label>Начало voting <input type="datetime-local" name="voting_starts_at" required value="{{.JamForm.VotingStarts}}"></label>
@@ -28,7 +28,7 @@
 {{if .Jam}}<div class="admin-checklist"><h3>Готовность к публикации</h3>
 <ul>
 <li>{{if gt .Jam.QuestionCount 0}}<span class="admin-ok">✓</span>{{else}}<span class="admin-issue">✗</span>{{end}} Анкета содержит хотя бы один вопрос (сейчас {{.Jam.QuestionCount}})</li>
-<li>{{if gt .Jam.ThemeCount 0}}<span class="admin-ok">✓</span>{{else}}<span class="admin-issue">✗</span>{{end}} Активных тем хотя бы одна (сейчас {{.Jam.ThemeCount}})</li>
+<li><span class="admin-meta">ℹ</span> Темы (сейчас {{.Jam.ThemeCount}}): формулируются на основе ответов анкеты, обязательны к началу приёма работ</li>
 </ul></div>{{end}}
 </section>
 {{if .Jam}}

@@ -58,6 +58,9 @@ type PageData struct {
 	Themes           []ThemeView
 	SelectedTheme    *ThemeView
 	ThemeConfigError bool
+	Products         []ProductView
+	OwnProductStatus string
+	Results          []NominationView
 }
 
 type JamView struct {

@@ -93,6 +93,51 @@ func canAdminMutateNominations(stage Stage) bool {
 	return stage == StageUpcoming || stage == StageSubmission || stage == StageEvaluation
 }
 
+func (a *App) loadPublicNominations(ctx context.Context, jamID int64, stage Stage) ([]NominationView, error) {
+	query := `
+		SELECT nomination.id, nomination.public_id, nomination.kind, nomination.title
+		FROM nominations nomination
+		WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
+		  AND (nomination.kind='curator' OR EXISTS (
+		      SELECT 1 FROM products product
+		      WHERE product.id=nomination.product_id AND product.jam_id=nomination.jam_id
+		        AND product.status IN ('final', 'draft')
+		  ))
+		ORDER BY nomination.created_at, nomination.id`
+	if stage == StageFinished {
+		query = `
+			SELECT nomination.id, nomination.public_id, nomination.kind, nomination.title, COALESCE(team.name, '')
+			FROM nominations nomination
+			LEFT JOIN teams team ON team.id=nomination.author_team_id AND team.jam_id=nomination.jam_id
+			WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
+			  AND (nomination.kind='curator' OR EXISTS (
+			      SELECT 1 FROM products product
+			      WHERE product.id=nomination.product_id AND product.jam_id=nomination.jam_id
+			        AND product.status IN ('final', 'draft')
+			  ))
+			ORDER BY nomination.created_at, nomination.id`
+	}
+	rows, err := a.pool.Query(ctx, query, jamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var nominations []NominationView
+	for rows.Next() {
+		var nomination NominationView
+		if stage == StageFinished {
+			err = rows.Scan(&nomination.ID, &nomination.PublicID, &nomination.Kind, &nomination.Title, &nomination.AuthorTeamName)
+		} else {
+			err = rows.Scan(&nomination.ID, &nomination.PublicID, &nomination.Kind, &nomination.Title)
+		}
+		if err != nil {
+			return nil, err
+		}
+		nominations = append(nominations, nomination)
+	}
+	return nominations, rows.Err()
+}
+
 func (a *App) nominationsList(c *gin.Context) {
 	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
@@ -109,51 +154,9 @@ func (a *App) nominationsList(c *gin.Context) {
 		a.nominationFailure(c, "load public nomination jam", err)
 		return
 	}
-	query := `
-		SELECT nomination.id, nomination.public_id, nomination.kind, nomination.title
-		FROM nominations nomination
-		WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
-		  AND (nomination.kind='curator' OR EXISTS (
-		      SELECT 1 FROM products product
-		      WHERE product.id=nomination.product_id AND product.jam_id=nomination.jam_id
-		        AND product.status='final'
-		  ))
-		ORDER BY nomination.created_at, nomination.id`
-	if stage == StageFinished {
-		query = `
-			SELECT nomination.id, nomination.public_id, nomination.kind, nomination.title, COALESCE(team.name, '')
-			FROM nominations nomination
-			LEFT JOIN teams team ON team.id=nomination.author_team_id AND team.jam_id=nomination.jam_id
-			WHERE nomination.jam_id=$1 AND nomination.withdrawn_at IS NULL
-			  AND (nomination.kind='curator' OR EXISTS (
-			      SELECT 1 FROM products product
-			      WHERE product.id=nomination.product_id AND product.jam_id=nomination.jam_id
-			        AND product.status='final'
-			  ))
-			ORDER BY nomination.created_at, nomination.id`
-	}
-	rows, err := a.pool.Query(c.Request.Context(), query, jamID)
+	nominations, err := a.loadPublicNominations(c.Request.Context(), jamID, stage)
 	if err != nil {
 		a.nominationFailure(c, "load public nominations", err)
-		return
-	}
-	defer rows.Close()
-	var nominations []NominationView
-	for rows.Next() {
-		var nomination NominationView
-		if stage == StageFinished {
-			err = rows.Scan(&nomination.ID, &nomination.PublicID, &nomination.Kind, &nomination.Title, &nomination.AuthorTeamName)
-		} else {
-			err = rows.Scan(&nomination.ID, &nomination.PublicID, &nomination.Kind, &nomination.Title)
-		}
-		if err != nil {
-			a.nominationFailure(c, "scan public nomination", err)
-			return
-		}
-		nominations = append(nominations, nomination)
-	}
-	if err = rows.Err(); err != nil {
-		a.nominationFailure(c, "iterate public nominations", err)
 		return
 	}
 	if stage == StageVoting {
@@ -204,14 +207,14 @@ func (a *App) populateFinishedResults(ctx context.Context, jamID int64, nominati
 			      SELECT 1 FROM products author_product
 			      WHERE author_product.id=nomination.product_id
 			        AND author_product.jam_id=nomination.jam_id
-			        AND author_product.status='final'
+			        AND author_product.status IN ('final', 'draft')
 			  ))
 		), vote_counts AS (
 			SELECT vote.nomination_id, vote.product_id, count(*)::bigint AS vote_count
 			FROM nomination_votes vote
 			JOIN public_nominations nomination ON nomination.id=vote.nomination_id
 			JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
-			  AND product.status='final'
+			  AND product.status IN ('final', 'draft')
 			WHERE vote.jam_id=$1 AND vote.invalidated_at IS NULL
 			GROUP BY vote.nomination_id, vote.product_id
 		), maxima AS (
@@ -268,7 +271,7 @@ func (a *App) populateVotingProducts(ctx context.Context, jamID int64, user *Use
 		FROM products product
 		JOIN teams team ON team.id=product.team_id AND team.jam_id=product.jam_id
 		JOIN jams jam ON jam.id=product.jam_id AND jam.visibility='published'
-		WHERE product.jam_id=$1 AND product.status='final'
+		WHERE product.jam_id=$1 AND product.status IN ('final', 'draft')
 		  AND CASE
 		      WHEN jam.status_override IS NOT NULL THEN jam.status_override='voting'
 		      ELSE clock_timestamp() >= jam.voting_starts_at AND clock_timestamp() < jam.finishes_at
@@ -306,11 +309,11 @@ func (a *App) populateVotingProducts(ctx context.Context, jamID int64, user *Use
 		JOIN products product ON product.id=vote.product_id AND product.jam_id=vote.jam_id
 		JOIN jams jam ON jam.id=vote.jam_id AND jam.visibility='published'
 		WHERE vote.jam_id=$1 AND vote.invalidated_at IS NULL
-		  AND nomination.withdrawn_at IS NULL AND product.status='final'
+		  AND nomination.withdrawn_at IS NULL AND product.status IN ('final', 'draft')
 		  AND (nomination.kind='curator' OR EXISTS (
 		      SELECT 1 FROM products author_product
 		      WHERE author_product.id=nomination.product_id AND author_product.jam_id=nomination.jam_id
-		        AND author_product.status='final'
+		        AND author_product.status IN ('final', 'draft')
 		  ))
 		  AND CASE
 		      WHEN jam.status_override IS NOT NULL THEN jam.status_override='voting'

@@ -68,9 +68,51 @@
         seconds: totalSeconds % 60
       };
       Object.entries(values).forEach(([key, value]) => { fields[key].textContent = String(value).padStart(2, "0"); });
-      if (remaining === 0 && interval) window.clearInterval(interval);
+      if (remaining === 0 && interval) {
+        // The timer is presentation only; the server computes the canonical
+        // stage. Reload so the new effective stage renders (jamDetail
+        // rechecks the stage and redirects if it already changed).
+        window.clearInterval(interval);
+        window.location.reload();
+      }
     };
     update();
     interval = window.setInterval(update, 1000);
   }
+
+  const helpDialog = document.getElementById("help-dossier");
+  const helpCards = helpDialog ? Array.from(helpDialog.querySelectorAll("[data-help-card]")) : [];
+  let helpIndex = 0;
+  function showHelpCard(index) {
+    if (helpCards.length === 0) return;
+    helpIndex = (index + helpCards.length) % helpCards.length;
+    helpCards.forEach((card, cardIndex) => {
+      card.hidden = cardIndex !== helpIndex;
+      card.setAttribute("aria-hidden", String(cardIndex !== helpIndex));
+    });
+    const dots = helpDialog?.querySelector("[data-help-dots]");
+    if (dots) dots.textContent = (helpIndex + 1) + " / " + helpCards.length;
+  }
+  document.querySelectorAll("[data-help-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!helpDialog) return;
+      showHelpCard(0);
+      if (!helpDialog.open) helpDialog.showModal();
+    });
+  });
+  helpDialog?.querySelector("[data-help-close]")?.addEventListener("click", () => helpDialog.close());
+  helpDialog?.querySelector("[data-help-prev]")?.addEventListener("click", () => showHelpCard(helpIndex - 1));
+  helpDialog?.querySelector("[data-help-next]")?.addEventListener("click", () => showHelpCard(helpIndex + 1));
+  helpDialog?.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); showHelpCard(helpIndex + 1); }
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); showHelpCard(helpIndex - 1); }
+  });
+  let helpTouchX = null;
+  helpDialog?.addEventListener("touchstart", (event) => { helpTouchX = event.touches[0].clientX; }, { passive: true });
+  helpDialog?.addEventListener("touchend", (event) => {
+    if (helpTouchX === null) return;
+    const delta = event.changedTouches[0].clientX - helpTouchX;
+    helpTouchX = null;
+    if (Math.abs(delta) > 40) showHelpCard(helpIndex + (delta < 0 ? 1 : -1));
+  }, { passive: true });
 })();

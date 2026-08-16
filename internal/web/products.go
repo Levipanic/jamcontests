@@ -29,6 +29,19 @@ var (
 	errProductTheme      = errors.New("Для финальной сдачи выберите активную тему этого джема.")
 )
 
+// productDisclosedClause returns the SQL status filter deciding whether a
+// product is publicly disclosed for the effective stage. Once evaluation
+// starts, a draft is disclosed as if finally submitted: the explicit
+// "Сдать финально" action becomes optional, and whatever the team left in
+// the card is their submitted product. Callers still must gate every query
+// by the stage disclosure rules themselves.
+func productDisclosedClause(alias string, stage Stage) string {
+	if stage == StageEvaluation || stage == StageVoting || stage == StageFinished {
+		return alias + ".status IN ('final', 'draft')"
+	}
+	return alias + ".status='final'"
+}
+
 type ProductView struct {
 	ID              int64
 	PublicID        string
@@ -329,6 +342,41 @@ func (a *App) productFinalize(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/jams/%s/product", publicJamID))
 }
 
+func (a *App) loadPublicProducts(ctx context.Context, jamID int64, publicJamID string, stage Stage) ([]ProductView, error) {
+	rows, err := a.pool.Query(ctx, `
+		SELECT p.id, p.public_id, p.title, p.result_url, p.description, COALESCE(p.commentary_url, ''),
+		       team.id, team.public_id, team.name, theme.phrase, p.status,
+		       COALESCE((SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint FROM product_bumps bump
+		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0)
+		FROM products p
+		JOIN jams jam ON jam.id=p.jam_id AND jam.visibility='published'
+		JOIN teams team ON team.id=p.team_id AND team.jam_id=p.jam_id
+		JOIN team_theme_selections selection ON selection.team_id=p.team_id AND selection.jam_id=p.jam_id
+		JOIN jam_themes theme ON theme.id=selection.theme_id AND theme.jam_id=p.jam_id
+		WHERE p.jam_id=$1 AND `+productDisclosedClause("p", stage)+`
+		  AND CASE
+		      WHEN jam.status_override IS NOT NULL
+		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
+		      ELSE clock_timestamp() >= jam.evaluation_starts_at
+		  END
+		ORDER BY p.finalized_at, p.id`, jamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var products []ProductView
+	for rows.Next() {
+		var product ProductView
+		product.JamID = jamID
+		product.JamPublicID = publicJamID
+		if err = rows.Scan(&product.ID, &product.PublicID, &product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamPublicID, &product.TeamName, &product.Theme, &product.Status, &product.BumpCount); err != nil {
+			return nil, err
+		}
+		products = append(products, product)
+	}
+	return products, rows.Err()
+}
+
 func (a *App) productsList(c *gin.Context) {
 	jamID, ok := a.resolvePublicID(c, "id", "jams")
 	if !ok {
@@ -344,41 +392,9 @@ func (a *App) productsList(c *gin.Context) {
 		a.productFailure(c, "load product list jam", err)
 		return
 	}
-	rows, err := a.pool.Query(c.Request.Context(), `
-		SELECT p.id, p.public_id, p.title, p.result_url, p.description, COALESCE(p.commentary_url, ''),
-		       team.id, team.public_id, team.name, theme.phrase,
-		       COALESCE((SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint FROM product_bumps bump
-		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0)
-		FROM products p
-		JOIN jams jam ON jam.id=p.jam_id AND jam.visibility='published'
-		JOIN teams team ON team.id=p.team_id AND team.jam_id=p.jam_id
-		JOIN team_theme_selections selection ON selection.team_id=p.team_id AND selection.jam_id=p.jam_id
-		JOIN jam_themes theme ON theme.id=selection.theme_id AND theme.jam_id=p.jam_id
-		WHERE p.jam_id=$1 AND p.status='final'
-		  AND CASE
-		      WHEN jam.status_override IS NOT NULL
-		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
-		      ELSE clock_timestamp() >= jam.evaluation_starts_at
-		  END
-		ORDER BY p.finalized_at, p.id`, jamID)
+	products, err := a.loadPublicProducts(c.Request.Context(), jamID, publicJamID, stage)
 	if err != nil {
 		a.productFailure(c, "load public products", err)
-		return
-	}
-	defer rows.Close()
-	var products []ProductView
-	for rows.Next() {
-		var product ProductView
-		product.JamID = jamID
-		product.JamPublicID = publicJamID
-		if err = rows.Scan(&product.ID, &product.PublicID, &product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL, &product.TeamID, &product.TeamPublicID, &product.TeamName, &product.Theme, &product.BumpCount); err != nil {
-			a.productFailure(c, "scan public product", err)
-			return
-		}
-		products = append(products, product)
-	}
-	if err = rows.Err(); err != nil {
-		a.productFailure(c, "iterate public products", err)
 		return
 	}
 	_, currentStage, recheckErr := a.loadPublishedJamStage(c.Request.Context(), jamID)
@@ -406,6 +422,7 @@ func (a *App) productDetail(c *gin.Context) {
 		       COALESCE(p.commentary_url, ''), team.id, team.public_id, team.name, theme.phrase,
 		       COALESCE((SELECT SUM(bump.bump_count-bump.invalidated_count)::bigint FROM product_bumps bump
 		                 WHERE bump.product_id=p.id AND bump.jam_id=p.jam_id), 0),
+		       p.status,
 		       jam.submission_starts_at, jam.evaluation_starts_at, jam.voting_starts_at,
 		       jam.finishes_at, jam.status_override
 		FROM products p
@@ -413,7 +430,7 @@ func (a *App) productDetail(c *gin.Context) {
 		JOIN teams team ON team.id=p.team_id AND team.jam_id=p.jam_id
 		JOIN team_theme_selections selection ON selection.team_id=p.team_id AND selection.jam_id=p.jam_id
 		JOIN jam_themes theme ON theme.id=selection.theme_id AND theme.jam_id=p.jam_id
-		WHERE p.id=$1 AND p.status='final'
+		WHERE p.id=$1 AND p.status IN ('final', 'draft')
 		  AND CASE
 		      WHEN jam.status_override IS NOT NULL
 		          THEN jam.status_override IN ('evaluation', 'voting', 'finished')
@@ -422,6 +439,7 @@ func (a *App) productDetail(c *gin.Context) {
 		&product.ID, &product.PublicID, &product.JamID, &product.JamPublicID, &product.JamTitle,
 		&product.Title, &product.ResultURL, &product.Description, &product.CommentaryURL,
 		&product.TeamID, &product.TeamPublicID, &product.TeamName, &product.Theme, &product.BumpCount,
+		&product.Status,
 		&schedule.SubmissionStartsAt, &schedule.EvaluationStartsAt, &schedule.VotingStartsAt, &schedule.FinishesAt, &override)
 	if errors.Is(err, pgx.ErrNoRows) {
 		c.AbortWithStatus(http.StatusNotFound)

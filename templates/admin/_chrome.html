@@ -13,7 +13,10 @@
     <a href="/admin/teams">Команды</a>
     <a href="/admin/audit">Аудит</a>
   </nav>
-  <form class="admin-logout" method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="button button-quiet" type="submit">Выйти</button></form>
+  <div class="admin-actions">
+    <a class="button button-quiet" href="/">На сайт</a>
+    <form class="admin-logout" method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="button button-quiet" type="submit">Выйти</button></form>
+  </div>
 </header>
 {{end}}
 

@@ -11,6 +11,7 @@
 </head>
 <body>
   <main class="dossier">
+    <a class="back-anchor" href="/jams/{{.Team.PublicJamID}}">← Вернуться к джему</a>
     <article>
       <header>
         <p>Командное дело № {{.Team.PublicID}}</p>
@@ -25,8 +26,15 @@
         {{if .Team.ThemePhrase}}<dt>Тема</dt><dd>{{.Team.ThemePhrase}}</dd>{{end}}
         {{if .Team.IsMember}}<dt>Допуск команды</dt><dd>{{if .Team.Eligible}}подтверждён{{else}}не подтверждён{{end}}</dd>{{end}}
       </dl>
-      {{if .Team.CanEditProduct}}<p><a class="action" href="/jams/{{.Team.PublicJamID}}/product">Редактировать продукт команды</a></p>{{end}}
-      {{if .Team.PublicProductID}}<p><a class="action secondary" href="/products/{{.Team.PublicProductID}}">Открыть сданный продукт</a></p>{{end}}
+      {{if or .Team.CanEditProduct .Team.PublicProductID .Team.IsMember}}
+      <section aria-labelledby="material-heading">
+        <p class="eyebrow">Материалы дела</p><h2 id="material-heading">Продукт команды</h2>
+        {{if .Team.ProductStatus}}<p>Статус карточки: <span class="auto-stamp">{{if eq .Team.ProductStatus "final"}}сдан в финал{{else}}черновик{{end}}</span></p>{{end}}
+        {{if .Team.CanEditProduct}}<p><a class="action" href="/jams/{{.Team.PublicJamID}}/product">{{if .Team.ProductStatus}}Продолжить сдачу продукта{{else}}Сдать продукт{{end}}</a></p>{{end}}
+        {{if .Team.PublicProductID}}<p><a class="action secondary" href="/products/{{.Team.PublicProductID}}">Открыть продукт команды</a></p>{{end}}
+        {{if and .Team.IsMember (not .Team.CanEditProduct) (not .Team.PublicProductID) (not .Team.ProductStatus)}}<p class="section-note">Карточка продукта ещё не заведена.</p>{{end}}
+      </section>
+      {{end}}
       <h2>Состав</h2>
       <ul>
         {{range .Team.Members}}

@@ -225,6 +225,10 @@ func (a *App) createJamAdmin(c *gin.Context) {
 		a.renderJamAdmin(c, http.StatusUnprocessableEntity, "admin_jam_form.html", jamAdminPageData{PageData: PageData{Error: err.Error()}, JamForm: form, MoscowZone: "Europe/Moscow"})
 		return
 	}
+	if !values.Schedule.SubmissionStartsAt.After(time.Now()) {
+		a.renderJamAdmin(c, http.StatusUnprocessableEntity, "admin_jam_form.html", jamAdminPageData{PageData: PageData{Error: "Начало приёма работ должно быть в будущем — расписание нового джема не может начинаться в прошлом."}, JamForm: form, MoscowZone: "Europe/Moscow"})
+		return
+	}
 	user := CurrentUser(c)
 	tx, err := a.pool.Begin(c.Request.Context())
 	if err != nil {
@@ -258,7 +262,7 @@ func (a *App) createJamAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "commit jam creation", err)
 		return
 	}
-	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), "Джем создан. К публикации нужны хотя бы один вопрос анкеты и одна тема.")
+	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), "Джем создан. К публикации нужен хотя бы один вопрос анкеты; темы вы составите позже на основе ответов участников.")
 }
 
 func (a *App) editJamAdminPage(c *gin.Context) {
@@ -453,6 +457,15 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 	message := "Джем опубликован."
 	if visibility == "draft" {
 		message = "Джем снят с публикации."
+	} else {
+		var themeCount int
+		if err = tx.QueryRow(c.Request.Context(), `SELECT count(*) FROM jam_themes WHERE jam_id=$1 AND withdrawn_at IS NULL`, jamID).Scan(&themeCount); err != nil {
+			a.jamAdminFailure(c, "count jam themes for publish message", err)
+			return
+		}
+		if themeCount == 0 {
+			message = "Джем опубликован. Предупреждение: до начала приёма работ добавьте темы — они формулируются на основе ответов анкеты."
+		}
 	}
 	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), message)
 }
@@ -1486,7 +1499,7 @@ func parseJamForm(form adminJamForm) (adminJamFormValues, error) {
 	if !values.Schedule.SubmissionStartsAt.Before(values.Schedule.EvaluationStartsAt) ||
 		!values.Schedule.EvaluationStartsAt.Before(values.Schedule.VotingStartsAt) ||
 		!values.Schedule.VotingStartsAt.Before(values.Schedule.FinishesAt) {
-		return values, errors.New("Границы расписания должны идти строго по порядку.")
+		return values, errors.New("Границы расписания должны идти строго по порядку: начало сдачи < начало оценки < начало голосования < завершение.")
 	}
 	values.Reason, err = validateReason(form.Reason)
 	if err != nil {

@@ -16,6 +16,12 @@
       <h1>Завести дело команды</h1>
     </header>
     {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
+    {{if .Rules}}
+    <details class="rules-paper">
+      <summary>Правила дела</summary>
+      <p>{{.Rules}}</p>
+    </details>
+    {{end}}
     <form method="post" action="/jams/{{.PublicJamID}}/teams/new" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <label>Название
@@ -27,6 +33,9 @@
       <label>Аватар команды (JPEG, PNG или WebP)
         <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp">
       </label>
+      {{if .Rules}}
+      <label class="rules-confirm"><input type="checkbox" name="rules_confirmed" value="yes" required> Я ознакомлен с правилами проведения джема</label>
+      {{end}}
       <button type="submit">Создать команду</button>
     </form>
     <p><a href="/jams/{{.PublicJamID}}">Вернуться к джему</a></p>

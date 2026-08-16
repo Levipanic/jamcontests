@@ -4,6 +4,7 @@
   <meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
   <title>Номинации · {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css">
 </head><body><main class="dossier">
+  <a class="back-anchor" href="/jams/{{.PublicJamID}}">← Вернуться к джему</a>
   <header class="case-heading"><p class="eyebrow">Опубликованное дело / джем № {{.PublicJamID}}</p><h1>Номинации · {{.JamTitle}}</h1></header>
   {{if .Nominations}}
   {{if eq .Stage "voting"}}

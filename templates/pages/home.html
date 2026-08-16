@@ -10,10 +10,12 @@
   <script src="/static/js/app.js" defer></script>
 </head>
 <body data-authenticated="{{if .User}}true{{else}}false{{end}}" data-auth-open="{{if .AuthOpen}}true{{else}}false{{end}}" data-auth-auto-open="{{if .AutoOpenAuth}}true{{else}}false{{end}}" data-auth-mode="{{.AuthMode}}">
+  {{$hasProducts := and .Products (or (eq .Jam.Stage "evaluation") (eq .Jam.Stage "voting") (eq .Jam.Stage "finished"))}}
   <nav class="anchor-nav" aria-label="Навигация по делу">
     <a href="#jam"><span>01</span> Джем</a>
-    <a href="#teams"><span>02</span> Команды</a>
-    <a href="#profile"><span>03</span> Профиль</a>
+    {{if $hasProducts}}<a href="#products"><span>02</span> Работы</a>{{end}}
+    <a href="#teams"><span>0{{if $hasProducts}}3{{else}}2{{end}}</span> Команды</a>
+    <a href="#profile"><span>0{{if $hasProducts}}4{{else}}3{{end}}</span> Профиль</a>
   </nav>
 
   <header class="site-mark">
@@ -50,20 +52,52 @@
           <div class="stage-stamp">{{.Jam.Stage}}</div>
         </div>{{else}}<div class="timer-card"><p class="eyebrow">{{if eq .Jam.Stage "finished"}}Дело завершено{{else}}Стадия зафиксирована{{end}}</p><div class="stage-stamp">{{.Jam.Stage}}</div></div>{{end}}
 
-        <dl class="jam-dates">{{range .Jam.Dates}}<dt>{{.Label}}</dt><dd><time datetime="{{.RFC3339}}">{{.Moscow}}</time></dd>{{end}}</dl>
-
-        {{if .Jam.Rules}}
-        <details class="rules-paper">
-          <summary>Правила дела</summary>
-          <p>{{.Jam.Rules}}</p>
-        </details>
+        {{$submitting := and (eq .Jam.Stage "submission") .Profile .Profile.TeamPublicID}}
+        {{if eq .Jam.Stage "upcoming"}}
+          <p class="stage-action">
+            {{if .User}}
+              {{if and .Profile .Profile.TeamPublicID}}
+                {{if eq .Profile.QuestionnaireStatus "completed"}}
+                  <span class="section-note">Анкета завершена — ждём открытия приёма работ.</span>
+                  <a class="action secondary" href="/jams/{{.Jam.PublicID}}/questionnaire">Пересмотреть анкету</a>
+                {{else}}
+                  <a class="action" href="/jams/{{.Jam.PublicID}}/questionnaire">Заполнить анкету участника</a>
+                {{end}}
+              {{else}}
+                <a class="action" href="/jams/{{.Jam.PublicID}}/teams/new">Создать команду и заполнить анкету</a>
+              {{end}}
+            {{else}}
+              <button class="action" type="button" data-open-auth="login" data-next="/jams/{{.Jam.PublicID}}">Войти и подготовиться к старту</button>
+            {{end}}
+          </p>
+        {{else if $submitting}}
+          <p class="stage-action">
+            {{if eq .OwnProductStatus "final"}}
+              <span class="section-note">Продукт сдан в финал.</span>
+              <a class="action secondary" href="/jams/{{.Jam.PublicID}}/product">Открыть карточку продукта</a>
+            {{else if and .Profile.Eligible (not .ThemeConfigError)}}
+              {{if .SelectedTheme}}
+                <a class="action" href="/jams/{{.Jam.PublicID}}/product">{{if .OwnProductStatus}}Продолжить сдачу продукта{{else}}Сдать продукт{{end}}</a>
+              {{else}}
+                <span class="section-note">Выберите тему команды ниже — без темы финальная сдача недоступна.</span>
+              {{end}}
+            {{else}}
+              <span class="section-note">{{if not .Profile.Eligible}}Ждём подтверждения допуска команды по анкете.{{else}}Критическая ошибка конфигурации: темы не подготовлены.{{end}}</span>
+            {{end}}
+          </p>
+        {{else if eq .Jam.Stage "evaluation"}}
+          <p class="stage-action"><a class="action" href="#products">Оценить работы участников</a></p>
+        {{else if eq .Jam.Stage "voting"}}
+          <p class="stage-action"><a class="action" href="/jams/{{.Jam.PublicID}}/nominations">Проголосовать по номинациям</a></p>
         {{end}}
+
+        <dl class="jam-dates">{{range .Jam.Dates}}<dt>{{.Label}}</dt><dd><time datetime="{{.RFC3339}}">{{.Moscow}}</time></dd>{{end}}</dl>
 
         {{if ne .Jam.Stage "upcoming"}}
         <section aria-labelledby="themes-title">
           <p class="eyebrow">Материалы дела</p><h2 id="themes-title">Темы</h2>
           {{if .ThemeConfigError}}<p class="alert" role="alert">Критическая ошибка конфигурации: для текущей стадии нет активных тем. Выбор темы и финальная сдача заблокированы.</p>{{end}}
-          {{if .Themes}}<ul>{{range .Themes}}<li>{{.Phrase}}</li>{{end}}</ul>{{end}}
+          {{if .Themes}}<div class="theme-cards">{{range .Themes}}<article class="theme-card"><strong>{{.Phrase}}</strong></article>{{end}}</div>{{end}}
           {{if and .SelectedTheme .Profile}}<p>Тема вашей команды: <strong>{{.SelectedTheme.Phrase}}</strong></p>{{end}}
           {{if and (eq .Jam.Stage "submission") .Profile .Profile.IsCaptain}}
             {{if .Profile.Eligible}}
@@ -72,11 +106,56 @@
           {{end}}
         </section>
         {{end}}
-        {{if or (eq .Jam.Stage "evaluation") (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
-        <p><a class="action secondary" href="/jams/{{.Jam.PublicID}}/products">Продукты джема</a></p>
+
+        {{if .Jam.Rules}}
+        <details class="rules-paper">
+          <summary>Правила дела</summary>
+          <p>{{.Jam.Rules}}</p>
+        </details>
         {{end}}
+
+        {{if $hasProducts}}
+        <section class="products-section" id="products" aria-labelledby="products-title">
+          <p class="eyebrow">Раскрытые материалы</p><h2 id="products-title">Работы команд</h2>
+          <div class="folder-scroll" tabindex="0" aria-label="Горизонтальный список продуктов">
+            {{range .Products}}<a class="team-folder" href="/products/{{.PublicID}}">
+              <span class="folder-tab">Продукт № {{.PublicID}}</span>
+              <span class="folder-body">
+                <span class="folder-copy">
+                  <strong>{{.Title}}</strong>
+                  <small>Команда: {{.TeamName}}</small>
+                  {{if .Theme}}<span>Тема: {{.Theme}}</span>{{end}}
+                  {{if eq .Status "draft"}}<em class="auto-stamp">Сдано автоматически</em>{{end}}
+                </span>
+                <em class="bump-note">Бампы: {{.BumpCount}}</em>
+              </span>
+            </a>{{end}}
+          </div>
+          <p><a class="action secondary" href="/jams/{{.Jam.PublicID}}/products">Все продукты джема</a></p>
+        </section>
+        {{end}}
+
+        {{if eq .Jam.Stage "finished"}}
+        <section class="results-section" id="results" aria-labelledby="results-title">
+          <p class="eyebrow">Решение по делу</p><h2 id="results-title">Номинации и победители</h2>
+          {{if .Results}}
+          <div class="result-list">
+            {{range .Results}}<article class="paper-card nomination-result">
+              <p class="eyebrow">Номинация{{if eq .Kind "curator"}} / кураторская{{end}}</p><h3>{{.Title}}</h3>
+              {{if eq .Kind "team"}}<p>Автор номинации: {{.AuthorTeamName}}</p>{{end}}
+              {{if and .Result (gt .Result.TotalVotes 0)}}<p>Всего голосов: {{.Result.TotalVotes}}</p>
+                <div class="winner-list">{{range .Result.Winners}}<article class="winner-card"><span class="winner-stamp">Победитель номинации</span>
+                  <h4><a href="/products/{{.PublicProductID}}">{{.ProductTitle}}</a></h4><p>Команда: <a href="/teams/{{.PublicTeamID}}">{{.TeamName}}</a></p><p>Голосов: <strong>{{.VoteCount}}</strong></p>
+                </article>{{end}}</div>
+              {{else}}<p class="empty-row">Голоса в этой номинации не поданы. Победитель не определён.</p>{{end}}
+            </article>{{end}}
+          </div>
+          {{else}}<p class="empty-row">Активных номинаций нет.</p>{{end}}
+        </section>
+        {{end}}
+
         {{if or (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
-        <p><a class="action secondary" href="/jams/{{.Jam.PublicID}}/nominations">Номинации джема</a></p>
+        <p><a class="action secondary" href="/jams/{{.Jam.PublicID}}/nominations">Все номинации джема</a></p>
         {{end}}
         <p><a href="/archive">Архив завершённых джемов</a></p>
       {{else}}
@@ -140,8 +219,10 @@
             <dt>Позывной</dt><dd>{{.User.Username}}</dd>
             <dt>Контакт</dt><dd>{{if .User.Email}}{{.User.Email}}{{else}}не указан{{end}}</dd>
             {{if and .Profile .Profile.TeamPublicID}}<dt>Команда</dt><dd><a href="/teams/{{.Profile.TeamPublicID}}">{{.Profile.TeamName}}</a>, {{.Profile.TeamRole}}</dd>
-            <dt>Анкета</dt><dd>{{if eq .Jam.Stage "upcoming"}}<a href="/jams/{{.Jam.PublicID}}/questionnaire">{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}</a>{{else}}{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}{{end}}</dd>
-            <dt>Допуск</dt><dd>{{if .Profile.Eligible}}получен{{else}}не получен{{end}}</dd>{{end}}
+            <dt>Анкета</dt><dd><a href="/jams/{{.Jam.PublicID}}/questionnaire">{{if eq .Profile.QuestionnaireStatus "completed"}}завершена{{else}}черновик{{end}}</a></dd>
+            <dt>Допуск</dt><dd>{{if .Profile.Eligible}}получен{{else}}не получен{{end}}</dd>
+            {{if eq .OwnProductStatus "draft"}}<dt>Продукт</dt><dd>черновик{{if and (eq .Jam.Stage "evaluation") (or (eq .Jam.Stage "voting") (eq .Jam.Stage "finished"))}} — сдан автоматически{{end}}</dd>{{end}}
+            {{if eq .OwnProductStatus "final"}}<dt>Продукт</dt><dd><a href="/jams/{{.Jam.PublicID}}/product">сдан в финал</a></dd>{{end}}{{end}}
           </dl>
         </article>
         <div class="profile-actions">
@@ -166,6 +247,40 @@
       {{end}}
     </section>
   </main>
+
+  <button class="help-trigger" type="button" data-help-open aria-label="Справка по джему">?</button>
+  <dialog class="help-dossier" id="help-dossier" aria-labelledby="help-title">
+    <button class="dialog-close" type="button" data-help-close aria-label="Закрыть">×</button>
+    <p class="eyebrow">Памятка участника</p>
+    <h2 id="help-title">Как устроен джем</h2>
+    <div class="help-cards">
+      <section class="help-card" data-help-card>
+        <h3>1. Сбор и анкета</h3>
+        <p>В стадии «Сбор» команда создаётся одной кнопкой, участники присоединяются по приглашению капитана. Каждый участник заполняет анкету: без завершённого ответа команда не получит допуск.</p>
+      </section>
+      <section class="help-card" data-help-card>
+        <h3>2. Стадии</h3>
+        <p>Дело идёт по отметкам: Сбор → Сдача → Оценка → Голосование → Финал. Границы видно над таймером и в расписании. Когда таймер доходит до нуля, страница сама обновится и покажет новую стадию.</p>
+      </section>
+      <section class="help-card" data-help-card>
+        <h3>3. Сдача продукта</h3>
+        <p>В «Сдаче» капитан выбирает тему команды и заполняет карточку продукта: название, ссылку на результат, описание. Если до конца стадии не нажали «Сдать финально», черновик будет сдан автоматически.</p>
+      </section>
+      <section class="help-card" data-help-card>
+        <h3>4. Оценка и голосование</h3>
+        <p>В «Оценке» работы всех команд открываются для просмотра, можно бампнуть любую понравившуюся (раз в минуту). В «Голосовании» по каждой номинации можно выбрать один продукт — голос можно менять до конца стадии.</p>
+      </section>
+      <section class="help-card" data-help-card>
+        <h3>5. Итоги и архив</h3>
+        <p>В «Финале» появляются победители номинаций и авторство предложенных командами номинаций. Завершённые джемы остаются в архиве навсегда.</p>
+      </section>
+    </div>
+    <div class="help-nav" aria-label="Листание справки">
+      <button type="button" data-help-prev aria-label="Предыдущая карточка">←</button>
+      <span class="help-dots" data-help-dots aria-live="polite"></span>
+      <button type="button" data-help-next aria-label="Следующая карточка">→</button>
+    </div>
+  </dialog>
 
   {{if not .User}}
   <dialog class="auth-dossier" id="auth-dossier" aria-labelledby="auth-title">
