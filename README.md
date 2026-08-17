@@ -1,67 +1,135 @@
 # Jam Contests
 
-Легковесная платформа командных творческих джемов на Go, Gin и PostgreSQL.
+Лёгкая платформа для командных творческих джемов: команды собираются вокруг одной темы,
+заполняют анкету допуска, выбирают тему, сдают продукт (текст, игру, музыку, видео,
+иллюстрацию — что угодно), получают бампы и голоса по номинациям. Платформа хранит
+только карточки продуктов и внешние ссылки — сами результаты размещаются авторами
+отдельно.
 
-## Локальный запуск
+Стек: Go 1.24, Gin, PostgreSQL (pgx), серверные шаблоны `html/template`,
+ванильный JavaScript и CSS без фреймворков.
 
-Требуются Go 1.24+, Docker с Compose и PowerShell 7+.
+## Быстрый старт (локальная разработка)
 
-1. Запустите PostgreSQL:
+Нужны Go 1.24+ и Docker с Compose. Команды даны для bash; в PowerShell замените
+`export VAR=value` на `$env:VAR = 'value'`.
 
-   ```powershell
-   docker compose up -d postgres
-   ```
+```bash
+# 1. Поднять PostgreSQL (база, пользователь и пароль — jamcontests/jamcontests)
+docker compose up -d postgres
 
-2. Задайте переменные окружения по образцу `.env.example`. Минимум:
+# 2. Задать минимум переменных окружения
+export DATABASE_URL='postgres://jamcontests:jamcontests@localhost:5432/jamcontests?sslmode=disable'
+export CSRF_SECRET='<не менее 32 случайных символов>'
+```
 
-   ```powershell
-   $env:DATABASE_URL = 'postgres://jamcontests:jamcontests@localhost:5432/jamcontests?sslmode=disable'
-   $env:CSRF_SECRET = 'replace-with-at-least-32-random-characters'
-   ```
+Миграции применяются отдельной командой, поэтому роль из `DATABASE_URL` не обязана
+быть владельцем схемы:
 
-3. Примените миграции:
+```bash
+# 3. Применить миграции
+go run ./cmd/jamcontests migrate
 
-   ```powershell
-   go run ./cmd/jamcontests migrate
-   ```
+# 4. Создать первого администратора (остальных админов может назначить только админ)
+export ADMIN_PASSWORD='<длинный надёжный пароль>'
+go run ./cmd/jamcontests create-admin --username admin
+unset ADMIN_PASSWORD
 
-4. Создайте первого администратора:
+# 5. Запустить сервер
+go run ./cmd/jamcontests serve
+```
 
-   ```powershell
-   $env:ADMIN_PASSWORD = 'use-a-long-unique-password'
-   go run ./cmd/jamcontests create-admin --username admin
-   Remove-Item Env:ADMIN_PASSWORD
-   ```
+Сайт: **http://localhost:8080** — публичная главная, регистрация и вход на ней же.
+Административная панель: **http://localhost:8080/admin** (ссылок на неё в интерфейсе нет,
+и сама она не публикует пользователя в админы).
 
-5. Запустите сервер:
+Команды должны запускаться из корня репозитория: шаблоны, статика и миграции
+читаются с диска относительно рабочего каталога. При изменениях в `templates/`,
+`static/` или миграциях нужно перезапустить сервер.
 
-   ```powershell
-   go run ./cmd/jamcontests serve
-   ```
+Весь `.env.example` описывает полный набор переменных, включая необязательные
+(`APP_ENV`, `HTTP_ADDR`, `LOG_LEVEL`, размеры, каталоги и т.д.).
 
-Сайт будет доступен на `http://localhost:8080`. Ссылки на административную панель в пользовательском интерфейсе нет; защищённый вход находится по адресу `/admin`.
+## Команды
 
-## Проверки
+| Команда | Что делает |
+|---|---|
+| `go run ./cmd/jamcontests serve` | Запускает веб-сервер (`HTTP_ADDR`, по умолчанию `:8080`). |
+| `go run ./cmd/jamcontests migrate` | Применяет все миграции из `migrations/`, идемпотентно. Вне режима development требует отдельную `MIGRATION_DATABASE_URL` (роль-владелец схемы); `serve` эту переменную никогда не читает. |
+| `go run ./cmd/jamcontests create-admin --username NAME [--email EMAIL] [--password-env ADMIN_PASSWORD]` | Создаёт администратора. Пароль берётся из переменной окружения (по умолчанию `ADMIN_PASSWORD`), в аргументах его передавать нельзя. |
 
-```powershell
-go fmt ./...
-go test ./...
+## Первый джем — карта процесса
+
+1. **Админ в `/admin`** создаёт джем: название, описание, правила, расписание стадий
+   (время Московское), максимальный размер команды. Сразу же настраивает анкету
+   (текстовые вопросы, одиночный/множественный выбор) и темы. Джем остаётся черновиком,
+   пока его не опубликуют; опубликованный активный джем может быть только один.
+2. **Участники** регистрируются и создают команды или присоединяются по приглашению
+   ссылкой от капитана. До старта приёма работ члены команды заполняют анкету допуска —
+   команда считается допущенной, когда хотя бы у одного действующего члена анкета
+   завершена (или админ выставил отмеченный в аудите override).
+3. **Стадия `submission`**: темы раскрываются автоматически, капитан выбирает тему
+   (можно менять до конца стадии), команда заполняет карточку продукта (название,
+   обязательная внешняя ссылка на результат, описание, доп. ссылки) и сдаёт её в финал.
+4. **Стадия `evaluation`**: работы раскрываются, зарегистрированные пользователи могут
+   «бампать» продукты (не чаще раза в минуту на пару пользователь—продукт).
+5. **Стадия `voting`**: раскрываются номинации (кураторские — от админа, авторские —
+   по одной от команды), голосовать может каждый пользователь, выбор в номинации можно
+   менять до закрытия; победители номинации — все продукты, набравшие максимум голосов
+   (ничьи не разыгрываются, общего победителя джема нет).
+6. **Стадия `finished`**: голосование закрыто, результаты и авторство номинаций
+   раскрыты, джем остаётся в архиве на главной.
+
+## Тесты
+
+```bash
+gofmt -w .
 go build ./...
 go vet ./...
-```
-
-PostgreSQL-интеграционные тесты используют отдельную случайную схему и пропускаются, если `TEST_DATABASE_URL` не задан. Для запуска с локальной БД из Compose:
-
-```powershell
-$env:TEST_DATABASE_URL = 'postgres://jamcontests:jamcontests@localhost:5432/jamcontests?sslmode=disable'
 go test ./...
-Remove-Item Env:TEST_DATABASE_URL
 ```
 
-Указанная роль должна иметь право создавать и удалять схемы. Каждый тест применяет актуальные миграции в собственной схеме и удаляет её после завершения.
+Интеграционные тесты с PostgreSQL пропускаются, если не задан `TEST_DATABASE_URL`.
+Каждый тест применяет все миграции в отдельной случайной схеме и удаляет её после;
+роль должна иметь право создавать и удалять схемы:
 
-Загруженные аватары сохраняются в `storage/avatars` (права `0750`) и не попадают в Git. В production каталог аватаров и PostgreSQL входят в резервное копирование; процедура и скрипты — `scripts/backup.sh`, `scripts/verify-backup.sh`, `docs/backup-restore.md`.
+```bash
+export TEST_DATABASE_URL='postgres://jamcontests:jamcontests@localhost:5432/jamcontests?sslmode=disable'
+go test ./... -race -count=1
+```
 
-В production задайте отдельный `MIGRATION_DATABASE_URL` для роли-владельца схемы; без него команда `migrate` не запускается, а `serve` эту переменную не читает. Runtime-роль из `DATABASE_URL` должна иметь только необходимые приложению права; для `admin_audit_log` ей нужны `SELECT` и `INSERT`, но не `UPDATE`, `DELETE`, `TRUNCATE` или владение таблицей. Миграция `009_runtime_privileges.sql` выдаёт права runtime-роли, если она существует, а миграции дополнительно блокируют изменения аудита триггерами. Инструкция по развёртыванию — в `docs/production.md`, шаблоны ролей и systemd-юнит — в `deploy/`.
+## Производственный запуск
 
-`GET /health` отдаёт `200` только когда PostgreSQL отвечает и схема полностью промигрирована; см. `docs/production.md`.
+- Аватары команд хранятся в `storage/avatars/` на локальном диске; каталог и PostgreSQL
+  входят в резервное копирование (`scripts/backup.sh`, `scripts/verify-backup.sh`,
+  `docs/backup-restore.md`).
+- В production обязательны отдельная `MIGRATION_DATABASE_URL` (роль-владелец схемы),
+  runtime-роль с минимальными правами (для `admin_audit_log` — только `SELECT`/`INSERT`),
+  `APP_ENV=production` и `TRUSTED_PROXIES` за реверс-прокси.
+- `GET /health` отвечает `200` только при живом PostgreSQL и полностью промигрированной схеме.
+- Подробная инструкция по развёртыванию, ролям и systemd — в `docs/production.md`,
+  шаблоны — в `deploy/`.
+
+## Структура
+
+```
+cmd/jamcontests/   CLI: serve, migrate, create-admin
+internal/config/   чтение и валидация переменных окружения
+internal/database/ подключение и миграции
+internal/web/      приложение: маршруты, хендлеры, бизнес-логика
+internal/auth/     пароли, сессии, CSRF
+migrations/        схема PostgreSQL (миграции по одному файлу)
+templates/         серверные шаблоны (pages/, admin/)
+static/            CSS и JS
+storage/avatars/   загруженные аватары
+docs/              production, backup, acceptance
+deploy/            шаблоны ролей SQL и systemd-юниты
+```
+
+## Документация
+
+- `AGENTS.md` — продуктовый контракт и архитектурные ограничения.
+- `docs/production.md` — развёртывание, роли PostgreSQL, systemd.
+- `docs/backup-restore.md` — резервное копирование и восстановление.
+- `docs/acceptance.md` — сценарии приёмки.
+- `backlog.md` и `context.md` — история работ и контекст развития проекта.
