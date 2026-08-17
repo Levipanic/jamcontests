@@ -103,7 +103,6 @@ h2 { font-size: clamp(2.4rem, 5vw, 5rem); }
   margin: 4rem 0 1.2rem;
   padding: 0;
   list-style: none;
-  border-top: 1px solid #676359;
 }
 .stage-ribbon li {
   position: relative;
@@ -114,6 +113,8 @@ h2 { font-size: clamp(2.4rem, 5vw, 5rem); }
   text-transform: uppercase;
 }
 .stage-ribbon li::before { content: ""; position: absolute; top: -.32rem; left: 0; width: .58rem; height: .58rem; border-radius: 50%; background: #676359; }
+.stage-ribbon li::after { content: ""; position: absolute; top: -.04rem; left: 0; right: 0; height: 1px; background: #676359; }
+.stage-ribbon li:last-child::after { display: none; }
 .stage-ribbon li span { display: block; margin-bottom: .28rem; }
 .stage-ribbon .past { color: #999184; text-decoration: line-through; }
 .stage-ribbon .current { color: #eee4d2; }
