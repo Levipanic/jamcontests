@@ -55,12 +55,6 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, username, rawEmail, pa
 		if _, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID); err != nil {
 			return fmt.Errorf("отозвать сессии после назначения: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO admin_audit_log (admin_user_id, action, entity_type, entity_id, reason, before_data, after_data)
-			VALUES ($1, 'admin.bootstrap_promote', 'user', $1, 'CLI bootstrap promotion',
-			        jsonb_build_object('role', $2::text), jsonb_build_object('role', 'admin'))`, userID, role); err != nil {
-			return fmt.Errorf("записать аудит назначения: %w", err)
-		}
 		return tx.Commit(ctx)
 	}
 	if err != pgx.ErrNoRows {
@@ -80,11 +74,6 @@ func CreateAdmin(ctx context.Context, pool *pgxpool.Pool, username, rawEmail, pa
 			return errors.New("имя пользователя или email уже заняты")
 		}
 		return fmt.Errorf("создать администратора: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO admin_audit_log (admin_user_id, action, entity_type, entity_id, reason, after_data)
-		VALUES ($1, 'admin.bootstrap_create', 'user', $1, 'CLI bootstrap creation', jsonb_build_object('role', 'admin'))`, userID); err != nil {
-		return fmt.Errorf("записать аудит создания: %w", err)
 	}
 	return tx.Commit(ctx)
 }

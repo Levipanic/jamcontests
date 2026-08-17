@@ -19,13 +19,13 @@
     window.clearInterval(cooldownTimers.get(panel));
 	if (!mutable) {
 	  button.disabled = true;
-	  button.textContent = "Бампы закрыты";
+	  button.textContent = "Лайки закрыты";
 	  return;
 	}
     let remaining = Math.max(0, Number(seconds) || 0);
     const render = () => {
       button.disabled = remaining > 0;
-      button.textContent = remaining > 0 ? `Бамп через ${remaining} с` : "Бамп";
+      button.textContent = remaining > 0 ? `Лайк через ${remaining} с` : "Лайк";
       if (remaining > 0) remaining -= 1;
     };
     render();
@@ -68,14 +68,14 @@
 		const data = await response.json().catch(() => ({}));
 		if (versions.get(panel) === version) {
 		  applyState(panel, data);
-		  if (response.ok) status.textContent = "Бамп учтён.";
+		  if (response.ok) status.textContent = "Лайк учтён.";
 		  else {
-			if (!data.error) status.textContent = "Не удалось обновить бампы.";
+			if (!data.error) status.textContent = "Не удалось обновить лайки.";
 			if (data.mutable === undefined && data.cooldown_seconds === undefined) button.disabled = false;
 		  }
 		}
       } catch (_) {
-        status.textContent = "Не удалось обновить бампы.";
+        status.textContent = "Не удалось обновить лайки.";
 		button.disabled = false;
 	  } finally {
 		posting.delete(panel);

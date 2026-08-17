@@ -69,10 +69,10 @@
       <form method="post" action="/teams/{{.Team.PublicID}}/edit" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <label>Название
-          <input name="name" value="{{.Team.Name}}" required minlength="2" maxlength="100">
+          <input name="name" value="{{.Team.Name}}" required minlength="2" maxlength="60">
         </label>
         <label>Описание
-          <textarea name="description" maxlength="3000" rows="8">{{.Team.Description}}</textarea>
+          <textarea name="description" maxlength="1000" rows="8">{{.Team.Description}}</textarea>
         </label>
         <label>Новый аватар (JPEG, PNG или WebP)
           <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp">
@@ -104,7 +104,7 @@
     {{if .Team.CanLeave}}
     <form method="post" action="/teams/{{.Team.PublicID}}/leave">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <button type="submit">Выйти из команды</button>
+      {{if .Team.IsCaptain}}<button type="submit">Выйти и удалить команду</button>{{else}}<button type="submit">Выйти из команды</button>{{end}}
     </form>
     {{end}}
     <p><a href="/jams/{{.Team.PublicJamID}}">Вернуться к джему</a></p>

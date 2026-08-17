@@ -143,9 +143,9 @@ func (a *App) bumpProduct(c *gin.Context) {
 			return
 		}
 		if response.Mutable {
-			response.Error = "Состояние джема изменилось. Повторите бамп."
+			response.Error = "Состояние джема изменилось. Повторите лайк."
 		} else {
-			response.Error = "Бампы для этого продукта уже закрыты."
+			response.Error = "Лайки для этого продукта уже закрыты."
 		}
 		c.JSON(http.StatusConflict, response)
 		return
@@ -205,9 +205,9 @@ func (a *App) bumpProduct(c *gin.Context) {
 			return
 		}
 		if response.Mutable {
-			response.Error = "Состояние джема изменилось. Повторите бамп."
+			response.Error = "Состояние джема изменилось. Повторите лайк."
 		} else {
-			response.Error = "Бампы для этого продукта уже закрыты."
+			response.Error = "Лайки для этого продукта уже закрыты."
 		}
 		c.JSON(http.StatusConflict, response)
 		return
@@ -221,7 +221,7 @@ func (a *App) bumpProduct(c *gin.Context) {
 	response.Count, response.CooldownSeconds = state.Count, state.CooldownSeconds
 	response.Bumped = bumped
 	if !response.Bumped {
-		response.Error = "Повторный бамп будет доступен после окончания паузы."
+		response.Error = "Повторный лайк будет доступен после окончания паузы."
 		c.JSON(http.StatusTooManyRequests, response)
 		return
 	}
@@ -285,5 +285,5 @@ func bumpNotFound(c *gin.Context) {
 
 func (a *App) bumpFailure(c *gin.Context, operation string, err error) {
 	a.logger.Error(operation, "error", err)
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось обновить бампы. Попробуйте позже."})
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось обновить лайки. Попробуйте позже."})
 }

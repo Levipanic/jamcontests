@@ -369,11 +369,6 @@ func (a *App) adminNominationCreate(c *gin.Context) {
 		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
@@ -390,14 +385,8 @@ func (a *App) adminNominationCreate(c *gin.Context) {
 		a.writeError(c, http.StatusConflict, "После начала голосования номинации изменять нельзя.")
 		return
 	}
-	var nominationID int64
-	if err = tx.QueryRow(ctx, `INSERT INTO nominations (jam_id, kind, title) VALUES ($1, 'curator', $2) RETURNING id`, jamID, title).Scan(&nominationID); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO nominations (jam_id, kind, title) VALUES ($1, 'curator', $2)`, jamID, title); err != nil {
 		a.adminNominationFailure(c, "create curator nomination", err)
-		return
-	}
-	after := nominationAuditData(nominationID, jamID, "curator", title, 0, 0, false)
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "nomination.create", "nomination", nominationID, reason, nil, after); err != nil {
-		a.adminNominationFailure(c, "audit curator nomination creation", err)
 		return
 	}
 	open, err := adminNominationMutationOpen(ctx, tx, jamID)
@@ -426,12 +415,7 @@ func (a *App) adminNominationEdit(c *gin.Context) {
 		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
-	a.mutateCuratorNomination(c, jamID, nominationID, title, reason, false)
+	a.mutateCuratorNomination(c, jamID, nominationID, title, false)
 }
 
 func (a *App) adminNominationWithdraw(c *gin.Context) {
@@ -439,16 +423,11 @@ func (a *App) adminNominationWithdraw(c *gin.Context) {
 	if !ok {
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
 	if c.PostForm("confirm") != "withdraw" {
 		a.renderAdminNominations(c, jamID, "Подтвердите отзыв номинации.", http.StatusUnprocessableEntity)
 		return
 	}
-	a.mutateCuratorNomination(c, jamID, nominationID, "", reason, true)
+	a.mutateCuratorNomination(c, jamID, nominationID, "", true)
 }
 
 func (a *App) adminNominationModerate(c *gin.Context) {
@@ -458,11 +437,6 @@ func (a *App) adminNominationModerate(c *gin.Context) {
 	}
 	title := normalizeNominationTitle(c.PostForm("title"))
 	if err := validateNominationTitle(title, false); err != nil {
-		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
 		a.renderAdminNominations(c, jamID, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -486,10 +460,9 @@ func (a *App) adminNominationModerate(c *gin.Context) {
 		a.handleAdminNominationLoadError(c, err)
 		return
 	}
-	var kind, beforeTitle string
-	var authorTeamID, productID *int64
-	var beforeWithdrawn bool
-	err = tx.QueryRow(ctx, `SELECT kind, title, author_team_id, product_id, withdrawn_at IS NOT NULL FROM nominations WHERE id=$1 AND jam_id=$2 FOR UPDATE`, nominationID, jamID).Scan(&kind, &beforeTitle, &authorTeamID, &productID, &beforeWithdrawn)
+	var beforeTitle string
+	var withdrawn bool
+	err = tx.QueryRow(ctx, `SELECT title, withdrawn_at IS NOT NULL FROM nominations WHERE id=$1 AND jam_id=$2 FOR UPDATE`, nominationID, jamID).Scan(&beforeTitle, &withdrawn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
@@ -498,27 +471,14 @@ func (a *App) adminNominationModerate(c *gin.Context) {
 		a.adminNominationFailure(c, "lock nomination moderation", err)
 		return
 	}
-	authorID, productValue := int64(0), int64(0)
-	if authorTeamID != nil {
-		authorID = *authorTeamID
-	}
-	if productID != nil {
-		productValue = *productID
-	}
 	afterWithdrawn := state == "withdrawn"
-	if beforeTitle == title && beforeWithdrawn == afterWithdrawn {
+	if beforeTitle == title && withdrawn == afterWithdrawn {
 		a.renderAdminNominations(c, jamID, "Номинация не изменилась.", http.StatusConflict)
 		return
 	}
-	before := nominationAuditData(nominationID, jamID, kind, beforeTitle, authorID, productValue, beforeWithdrawn)
 	_, err = tx.Exec(ctx, `UPDATE nominations SET title=$2, withdrawn_at=CASE WHEN $3 THEN COALESCE(withdrawn_at, clock_timestamp()) ELSE NULL END, updated_at=now() WHERE id=$1`, nominationID, title, afterWithdrawn)
 	if err != nil {
 		a.adminNominationFailure(c, "moderate nomination", err)
-		return
-	}
-	after := nominationAuditData(nominationID, jamID, kind, title, authorID, productValue, afterWithdrawn)
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "nomination.moderate", "nomination", nominationID, reason, before, after); err != nil {
-		a.adminNominationFailure(c, "audit nomination moderation", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -528,7 +488,7 @@ func (a *App) adminNominationModerate(c *gin.Context) {
 	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/nominations", jamID), "Модерация номинации применена.")
 }
 
-func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64, title, reason string, withdraw bool) {
+func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64, title string, withdraw bool) {
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
@@ -564,21 +524,13 @@ func (a *App) mutateCuratorNomination(c *gin.Context, jamID, nominationID int64,
 		a.writeError(c, http.StatusConflict, "Название номинации не изменилось.")
 		return
 	}
-	before := nominationAuditData(nominationID, jamID, "curator", beforeTitle, 0, 0, false)
-	action, afterTitle := "nomination.edit", title
 	if withdraw {
-		action, afterTitle = "nomination.withdraw", beforeTitle
 		_, err = tx.Exec(ctx, `UPDATE nominations SET withdrawn_at=now(), updated_at=now() WHERE id=$1`, nominationID)
 	} else {
 		_, err = tx.Exec(ctx, `UPDATE nominations SET title=$2, updated_at=now() WHERE id=$1`, nominationID, title)
 	}
 	if err != nil {
 		a.adminNominationFailure(c, "update curator nomination", err)
-		return
-	}
-	after := nominationAuditData(nominationID, jamID, "curator", afterTitle, 0, 0, withdraw)
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), action, "nomination", nominationID, reason, before, after); err != nil {
-		a.adminNominationFailure(c, "audit curator nomination mutation", err)
 		return
 	}
 	open, err := adminNominationMutationOpen(ctx, tx, jamID)
@@ -658,10 +610,6 @@ func (a *App) renderAdminNominations(c *gin.Context, jamID int64, message string
 
 func normalizeNominationTitle(value string) string {
 	return strings.TrimSpace(value)
-}
-
-func nominationAuditData(id, jamID int64, kind, title string, teamID, productID int64, withdrawn bool) map[string]any {
-	return map[string]any{"id": id, "jam_id": jamID, "kind": kind, "title": title, "author_team_id": teamID, "product_id": productID, "withdrawn": withdrawn}
 }
 
 func adminNominationIDs(c *gin.Context) (int64, int64, bool) {

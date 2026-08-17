@@ -19,7 +19,6 @@
 <label>Статус <select name="status"><option value="draft"{{if eq .Status "draft"}} selected{{end}}>Черновик</option><option value="final"{{if eq .Status "final"}} selected{{end}}>Финально сдан</option></select></label>
 <label class="admin-check"><input type="checkbox" name="confirm_status_change" value="yes"> Подтверждаю изменение статуса, если он выбран иначе</label>
 <label class="admin-check"><input type="checkbox" name="confirm_post_reveal" value="yes"> Подтверждаю изменение уже раскрытого продукта</label>
-<label>Причина вмешательства <textarea name="reason" required maxlength="1000" rows="2"></textarea></label>
 <button class="admin-danger" type="submit">Применить модерацию</button>
 </form>
 </article>{{end}}{{else}}<p>Карточек продуктов пока нет.</p>{{end}}

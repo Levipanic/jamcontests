@@ -24,7 +24,6 @@ type adminControlPageData struct {
 	Ok         string
 	Users      []adminControlUser
 	Teams      []adminControlTeam
-	Audit      []adminControlAudit
 	Search     string
 	UserDetail *adminControlUserDetail
 	Pager      *adminPager
@@ -53,18 +52,6 @@ type adminControlUserDetail struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	Memberships []adminControlUserMembership
-}
-
-type adminControlAudit struct {
-	ID         int64
-	AdminName  string
-	Action     string
-	EntityType string
-	EntityID   *int64
-	Reason     string
-	Before     string
-	After      string
-	CreatedAt  time.Time
 }
 
 type adminControlMember struct {
@@ -103,7 +90,6 @@ type adminControlLockedTeam struct {
 // registerAdminControlRoutes installs administrative controls outside the jam editor.
 func (a *App) registerAdminControlRoutes(router *gin.Engine) {
 	admin := router.Group("/admin", RequireAdmin())
-	admin.GET("/audit", a.adminControlAuditPage)
 	admin.GET("/users", a.adminControlUsersPage)
 	admin.GET("/users/:id", a.adminControlUserDetailPage)
 	admin.POST("/users/:id/role", a.adminControlUserRole)
@@ -115,44 +101,6 @@ func (a *App) registerAdminControlRoutes(router *gin.Engine) {
 	admin.POST("/teams/:id/members/:userID/remove", a.adminControlTeamMemberRemove)
 	admin.POST("/teams/:id/captain", a.adminControlTeamCaptain)
 	admin.POST("/teams/:id/eligibility", a.adminControlTeamEligibility)
-}
-
-func (a *App) adminControlAuditPage(c *gin.Context) {
-	page, per := adminPageParam(c)
-	var total int
-	if err := a.pool.QueryRow(c.Request.Context(), `SELECT count(*) FROM admin_audit_log l JOIN users u ON u.id = l.admin_user_id`).Scan(&total); err != nil {
-		a.adminControlRender(c, http.StatusInternalServerError, "admin_audit.html", adminControlPageData{Error: "Не удалось загрузить журнал аудита."})
-		return
-	}
-	rows, err := a.pool.Query(c.Request.Context(), `
-		SELECT l.id, u.username, l.action, l.entity_type, l.entity_id, l.reason,
-		       COALESCE(l.before_data::text, ''), COALESCE(l.after_data::text, ''), l.created_at
-		FROM admin_audit_log l JOIN users u ON u.id = l.admin_user_id
-		ORDER BY l.created_at DESC, l.id DESC OFFSET $1 LIMIT $2`, (page-1)*per, per)
-	if err != nil {
-		a.adminControlRender(c, http.StatusInternalServerError, "admin_audit.html", adminControlPageData{Error: "Не удалось загрузить журнал аудита."})
-		return
-	}
-	defer rows.Close()
-	var entries []adminControlAudit
-	for rows.Next() {
-		var entry adminControlAudit
-		if err := rows.Scan(&entry.ID, &entry.AdminName, &entry.Action, &entry.EntityType, &entry.EntityID, &entry.Reason, &entry.Before, &entry.After, &entry.CreatedAt); err != nil {
-			a.logger.Error("scan admin audit", "error", err)
-			a.adminControlRender(c, http.StatusInternalServerError, "admin_audit.html", adminControlPageData{Error: "Не удалось загрузить журнал аудита."})
-			return
-		}
-		entries = append(entries, entry)
-	}
-	if err := rows.Err(); err != nil {
-		a.logger.Error("load admin audit", "error", err)
-		a.adminControlRender(c, http.StatusInternalServerError, "admin_audit.html", adminControlPageData{Error: "Не удалось загрузить журнал аудита."})
-		return
-	}
-	a.adminControlRender(c, http.StatusOK, "admin_audit.html", adminControlPageData{
-		Audit: entries, Error: c.Query("error"), Ok: c.Query("ok"),
-		Pager: buildAdminPager("/admin/audit", page, per, total),
-	})
 }
 
 func (a *App) adminControlUsersPage(c *gin.Context) {
@@ -250,11 +198,6 @@ func (a *App) adminControlUserRole(c *gin.Context) {
 		a.adminControlRedirect(c, "/admin/users", "Допустимы только роли user и admin.")
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/users", err.Error())
-		return
-	}
 	if c.PostForm("confirm") != "change_role" {
 		a.adminControlRedirect(c, "/admin/users", "Подтвердите изменение роли.")
 		return
@@ -270,8 +213,8 @@ func (a *App) adminControlUserRole(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/users", "lock admin roles", err)
 		return
 	}
-	var username, beforeRole string
-	if err = tx.QueryRow(ctx, `SELECT username, role FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&username, &beforeRole); err != nil {
+	var beforeRole string
+	if err = tx.QueryRow(ctx, `SELECT role FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&beforeRole); err != nil {
 		a.adminControlMutationLoadError(c, "/admin/users", "load user role", err)
 		return
 	}
@@ -289,12 +232,6 @@ func (a *App) adminControlUserRole(c *gin.Context) {
 			a.adminControlRedirect(c, "/admin/users", "Нельзя понизить последнего администратора.")
 			return
 		}
-	}
-	before := map[string]any{"id": userID, "username": username, "role": beforeRole}
-	after := map[string]any{"id": userID, "username": username, "role": role}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "user.role_update", "user", userID, reason, before, after); err != nil {
-		a.adminControlFailure(c, "/admin/users", "audit user role update", err)
-		return
 	}
 	if _, err = tx.Exec(ctx, `UPDATE users SET role=$1, updated_at=now() WHERE id=$2`, role, userID); err != nil {
 		a.adminControlFailure(c, "/admin/users", "update user role", err)
@@ -349,28 +286,18 @@ func (a *App) adminControlTeamProfile(c *gin.Context) {
 		a.adminControlRedirect(c, "/admin/teams", err.Error())
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/teams", err.Error())
-		return
-	}
-	ctx, tx, team, ok := a.adminControlBeginTeam(c, teamID, "изменить профиль команды")
+	ctx, tx, _, ok := a.adminControlBeginTeam(c, teamID, "изменить профиль команды")
 	if !ok {
 		return
 	}
 	defer tx.Rollback(ctx)
-	before := adminControlTeamProfileAudit(team)
+	var err error
 	if _, err = tx.Exec(ctx, `UPDATE teams SET name=$1, description=$2, updated_at=now() WHERE id=$3`, name, description, teamID); err != nil {
 		if teamConstraint(err, "teams_name_per_jam_ci_unique") {
 			a.adminControlRedirect(c, "/admin/teams", "Команда с таким названием уже существует в этом джеме.")
 			return
 		}
 		a.adminControlFailure(c, "/admin/teams", "update team profile", err)
-		return
-	}
-	team.Name, team.Description = name, description
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "team.profile_update", "team", teamID, reason, before, adminControlTeamProfileAudit(team)); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "audit team profile", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -385,11 +312,6 @@ func (a *App) adminControlTeamAvatarRemove(c *gin.Context) {
 	if !ok {
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/teams", err.Error())
-		return
-	}
 	ctx, tx, team, ok := a.adminControlBeginTeam(c, teamID, "удалить аватар команды")
 	if !ok {
 		return
@@ -400,13 +322,9 @@ func (a *App) adminControlTeamAvatarRemove(c *gin.Context) {
 		return
 	}
 	avatarPath := *team.AvatarPath
+	var err error
 	if _, err = tx.Exec(ctx, `UPDATE teams SET avatar_path=NULL, updated_at=now() WHERE id=$1`, teamID); err != nil {
 		a.adminControlFailure(c, "/admin/teams", "remove team avatar record", err)
-		return
-	}
-	before := map[string]any{"avatar_path": avatarPath}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "team.avatar_remove", "team", teamID, reason, before, map[string]any{"avatar_path": nil}); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "audit team avatar removal", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -422,13 +340,8 @@ func (a *App) adminControlTeamInviteRevoke(c *gin.Context) {
 	if !ok {
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/teams", err.Error())
-		return
-	}
 	replacement := make([]byte, 32)
-	if _, err = rand.Read(replacement); err != nil {
+	if _, err := rand.Read(replacement); err != nil {
 		a.adminControlFailure(c, "/admin/teams", "generate invite revocation", err)
 		return
 	}
@@ -445,10 +358,6 @@ func (a *App) adminControlTeamInviteRevoke(c *gin.Context) {
 	}
 	if result.RowsAffected() != 1 {
 		a.adminControlRedirect(c, "/admin/teams", "У команды нет активного приглашения.")
-		return
-	}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "team.invite_revoke", "team", teamID, reason, map[string]any{"active": true}, map[string]any{"active": false}); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "audit team invite revocation", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -468,19 +377,14 @@ func (a *App) adminControlTeamMemberAdd(c *gin.Context) {
 		a.adminControlRedirect(c, "/admin/teams", "Укажите имя пользователя.")
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/teams", err.Error())
-		return
-	}
 	ctx, tx, team, ok := a.adminControlBeginTeam(c, teamID, "добавить участника")
 	if !ok {
 		return
 	}
 	defer tx.Rollback(ctx)
 	var userID int64
-	var canonicalUsername string
-	if err = tx.QueryRow(ctx, `SELECT id, username FROM users WHERE lower(username)=lower($1)`, username).Scan(&userID, &canonicalUsername); err != nil {
+	var err error
+	if err = tx.QueryRow(ctx, `SELECT id FROM users WHERE lower(username)=lower($1)`, username).Scan(&userID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			a.adminControlRedirect(c, "/admin/teams", "Пользователь не найден.")
 			return
@@ -523,11 +427,6 @@ func (a *App) adminControlTeamMemberAdd(c *gin.Context) {
 		a.adminControlFailure(c, "/admin/teams", "add team member", err)
 		return
 	}
-	after := map[string]any{"team_id": teamID, "jam_id": team.JamID, "user_id": userID, "username": canonicalUsername}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "team.member_add", "team", teamID, reason, nil, after); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "audit team member addition", err)
-		return
-	}
 	if err = tx.Commit(ctx); err != nil {
 		a.adminControlFailure(c, "/admin/teams", "commit team member addition", err)
 		return
@@ -544,32 +443,22 @@ func (a *App) adminControlTeamMemberRemove(c *gin.Context) {
 	if !ok {
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/teams", err.Error())
-		return
-	}
 	ctx, tx, team, ok := a.adminControlBeginTeam(c, teamID, "удалить участника")
 	if !ok {
 		return
 	}
 	defer tx.Rollback(ctx)
+	var err error
 	if team.CaptainID == userID {
 		a.adminControlRedirect(c, "/admin/teams", "Нельзя удалить капитана. Сначала назначьте другого капитана.")
 		return
 	}
-	var username string
-	if err = tx.QueryRow(ctx, `SELECT u.username FROM team_members tm JOIN users u ON u.id=tm.user_id WHERE tm.team_id=$1 AND tm.user_id=$2`, teamID, userID).Scan(&username); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT 1 FROM team_members WHERE team_id=$1 AND user_id=$2`, teamID, userID).Scan(new(int)); err != nil {
 		a.adminControlMutationLoadError(c, "/admin/teams", "load team member", err)
 		return
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM team_members WHERE team_id=$1 AND user_id=$2`, teamID, userID); err != nil {
 		a.adminControlFailure(c, "/admin/teams", "remove team member", err)
-		return
-	}
-	before := map[string]any{"team_id": teamID, "jam_id": team.JamID, "user_id": userID, "username": username}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "team.member_remove", "team", teamID, reason, before, nil); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "audit team member removal", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -589,26 +478,17 @@ func (a *App) adminControlTeamCaptain(c *gin.Context) {
 		a.adminControlRedirect(c, "/admin/teams", "Выберите нового капитана.")
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/teams", err.Error())
-		return
-	}
 	ctx, tx, team, ok := a.adminControlBeginTeam(c, teamID, "назначить капитана")
 	if !ok {
 		return
 	}
 	defer tx.Rollback(ctx)
+	var err error
 	if targetID == team.CaptainID {
 		a.adminControlRedirect(c, "/admin/teams", "Этот участник уже капитан.")
 		return
 	}
-	var oldName, newName string
-	if err = tx.QueryRow(ctx, `SELECT username FROM users WHERE id=$1`, team.CaptainID).Scan(&oldName); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "load current captain", err)
-		return
-	}
-	if err = tx.QueryRow(ctx, `SELECT u.username FROM team_members tm JOIN users u ON u.id=tm.user_id WHERE tm.team_id=$1 AND tm.user_id=$2`, teamID, targetID).Scan(&newName); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT 1 FROM team_members WHERE team_id=$1 AND user_id=$2`, teamID, targetID).Scan(new(int)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			a.adminControlRedirect(c, "/admin/teams", "Капитаном можно назначить только текущего участника.")
 			return
@@ -618,12 +498,6 @@ func (a *App) adminControlTeamCaptain(c *gin.Context) {
 	}
 	if _, err = tx.Exec(ctx, `UPDATE teams SET captain_user_id=$1, updated_at=now() WHERE id=$2`, targetID, teamID); err != nil {
 		a.adminControlFailure(c, "/admin/teams", "update team captain", err)
-		return
-	}
-	before := map[string]any{"captain_user_id": team.CaptainID, "captain_username": oldName}
-	after := map[string]any{"captain_user_id": targetID, "captain_username": newName}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "team.captain_update", "team", teamID, reason, before, after); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "audit team captain update", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -638,52 +512,30 @@ func (a *App) adminControlTeamEligibility(c *gin.Context) {
 	if !ok {
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.adminControlRedirect(c, "/admin/teams", err.Error())
-		return
-	}
 	setAllowed := c.PostForm("allowed") == "true"
 	ctx, tx, _, ok := a.adminControlBeginTeam(c, teamID, "изменить eligibility override")
 	if !ok {
 		return
 	}
 	defer tx.Rollback(ctx)
-	var before map[string]any
-	var previousAllowed bool
-	var previousReason string
-	err = tx.QueryRow(ctx, `SELECT allowed, reason FROM team_eligibility_overrides WHERE team_id=$1 FOR UPDATE`, teamID).Scan(&previousAllowed, &previousReason)
-	if err == nil {
-		before = map[string]any{"allowed": previousAllowed, "reason": previousReason}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		a.adminControlFailure(c, "/admin/teams", "load eligibility override", err)
-		return
-	}
-	var after map[string]any
+	var err error
 	if setAllowed {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO team_eligibility_overrides (team_id, allowed, reason, admin_user_id)
-			VALUES ($1, true, $2, $3)
-			ON CONFLICT (team_id) DO UPDATE SET allowed=true, reason=EXCLUDED.reason,
-			admin_user_id=EXCLUDED.admin_user_id, updated_at=now()`, teamID, reason, CurrentUser(c).ID)
-		after = map[string]any{"allowed": true, "reason": reason}
+			INSERT INTO team_eligibility_overrides (team_id, allowed, admin_user_id)
+			VALUES ($1, true, $2)
+			ON CONFLICT (team_id) DO UPDATE SET allowed=true,
+			admin_user_id=EXCLUDED.admin_user_id, updated_at=now()`, teamID, CurrentUser(c).ID)
 	} else {
-		if before == nil {
+		result, deleteErr := tx.Exec(ctx, `DELETE FROM team_eligibility_overrides WHERE team_id=$1`, teamID)
+		if deleteErr != nil {
+			err = deleteErr
+		} else if result.RowsAffected() == 0 {
 			a.adminControlRedirect(c, "/admin/teams", "У команды нет eligibility override.")
 			return
 		}
-		_, err = tx.Exec(ctx, `DELETE FROM team_eligibility_overrides WHERE team_id=$1`, teamID)
 	}
 	if err != nil {
 		a.adminControlFailure(c, "/admin/teams", "update eligibility override", err)
-		return
-	}
-	action := "team.eligibility_override_set"
-	if !setAllowed {
-		action = "team.eligibility_override_remove"
-	}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), action, "team", teamID, reason, before, after); err != nil {
-		a.adminControlFailure(c, "/admin/teams", "audit eligibility override", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -798,10 +650,6 @@ func adminControlLockTeam(ctx context.Context, tx pgx.Tx, teamID int64) (adminCo
 		WHERE t.id=$1 FOR UPDATE OF t FOR SHARE OF j`, teamID).Scan(
 		&team.ID, &team.JamID, &team.Name, &team.Description, &team.AvatarPath, &team.CaptainID, &team.MaxSize)
 	return team, err
-}
-
-func adminControlTeamProfileAudit(team adminControlLockedTeam) map[string]any {
-	return map[string]any{"id": team.ID, "jam_id": team.JamID, "name": team.Name, "description": team.Description}
 }
 
 func (a *App) adminControlRender(c *gin.Context, status int, name string, data adminControlPageData) {

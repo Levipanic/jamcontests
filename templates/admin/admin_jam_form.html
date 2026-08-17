@@ -22,7 +22,6 @@
 <label>Завершение <input type="datetime-local" name="finishes_at" required value="{{.JamForm.Finishes}}"></label>
 </fieldset>
 <label>Максимальный размер команды <input type="number" min="1" max="100" name="max_team_size" required value="{{.JamForm.MaxTeamSize}}"></label>
-<label>Причина изменения <textarea name="reason" minlength="3" maxlength="1000" required>{{.JamForm.Reason}}</textarea></label>
 <button type="submit">{{if .Jam}}Сохранить изменения{{else}}Создать джем{{end}}</button>
 </form>
 {{if .Jam}}<div class="admin-checklist"><h3>Готовность к публикации</h3>
@@ -40,14 +39,14 @@
 <li><a href="/admin/jams/{{.Jam.ID}}/votes">Голоса</a></li>
 <li><a href="/admin/jams/{{.Jam.ID}}/bumps">Бампы</a></li>
 </ul></section>
-<section class="admin-section admin-danger-block"><h2>Видимость и стадия</h2><p class="admin-help">Все действия требуют отдельного обоснования и попадают в аудит. Hard delete отсутствует.</p>
+<section class="admin-section admin-danger-block"><h2>Видимость и стадия</h2><p class="admin-help">Все действия требуют подтверждения. Hard delete отсутствует.</p>
 {{if eq .Jam.Visibility "draft"}}
-<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/publish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина публикации <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Опубликовать</button></form>
+<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/publish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Опубликовать</button></form>
 {{else}}
-<form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{.Jam.ID}}/unpublish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина снятия с публикации <input name="reason" minlength="3" maxlength="1000" required></label><button class="admin-danger" type="submit">Снять с публикации</button></form>
+<form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{.Jam.ID}}/unpublish"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="admin-danger" type="submit">Снять с публикации</button></form>
 {{end}}
-<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/override"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Явная стадия <select name="stage" required><option value="upcoming">Сбор (upcoming)</option><option value="submission">Сдача (submission)</option><option value="evaluation">Оценка (evaluation)</option><option value="voting">Голосование (voting)</option><option value="finished">Финал (finished)</option></select></label><label>Причина override <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Установить override</button></form>
-<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/auto"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина возврата в auto <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Вернуть автоматическую стадию</button></form>
+<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/override"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Явная стадия <select name="stage" required><option value="upcoming">Сбор (upcoming)</option><option value="submission">Сдача (submission)</option><option value="evaluation">Оценка (evaluation)</option><option value="voting">Голосование (voting)</option><option value="finished">Финал (finished)</option></select></label><button type="submit">Установить override</button></form>
+<form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/auto"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Вернуть автоматическую стадию</button></form>
 </section>
 {{end}}
 </main>

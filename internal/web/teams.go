@@ -293,7 +293,7 @@ func (a *App) teamDetail(c *gin.Context) {
 	}
 	view.IsCaptain = user != nil && user.ID == view.CaptainID && view.IsMember
 	view.CanManage = view.IsCaptain && CanManageTeam(stage)
-	view.CanLeave = view.IsMember && !view.IsCaptain && CanManageTeam(stage)
+	view.CanLeave = view.IsMember && CanManageTeam(stage) && (!view.IsCaptain || view.MemberCount == 1)
 	view.CanEditProduct = stage == StageSubmission && view.IsMember && (view.IsCaptain || viewerProductEditor)
 	if view.IsMember {
 		err = a.pool.QueryRow(ctx, `SELECT status FROM products WHERE team_id=$1 AND jam_id=$2`, teamID, view.JamID).Scan(&view.ProductStatus)
@@ -730,13 +730,27 @@ func (a *App) teamLeave(c *gin.Context) {
 		return
 	}
 	if team.CaptainID == userID {
-		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Сначала передайте капитанство другому участнику.")
-		return
-	}
-	result, err := tx.Exec(ctx, `DELETE FROM team_members WHERE team_id = $1 AND user_id = $2`, teamID, userID)
-	if err != nil || result.RowsAffected() != 1 {
-		teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Вы не состоите в этой команде.")
-		return
+		var members int
+		if err = tx.QueryRow(ctx, `SELECT count(*) FROM team_members WHERE team_id=$1`, teamID).Scan(&members); err != nil {
+			a.logger.Error("count team members on leave", "error", err)
+			teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось выйти из команды. Попробуйте позже.")
+			return
+		}
+		if members > 1 {
+			teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Сначала передайте капитанство другому участнику.")
+			return
+		}
+		if err = a.deleteTeamTx(ctx, tx, teamID); err != nil {
+			a.logger.Error("delete last-member team", "error", err)
+			teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Не удалось удалить команду. Попробуйте позже.")
+			return
+		}
+	} else {
+		result, err := tx.Exec(ctx, `DELETE FROM team_members WHERE team_id = $1 AND user_id = $2`, teamID, userID)
+		if err != nil || result.RowsAffected() != 1 {
+			teamRedirectError(c, fmt.Sprintf("/teams/%s", publicID), "Вы не состоите в этой команде.")
+			return
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		a.logger.Error("commit team leave", "error", err)
@@ -744,6 +758,26 @@ func (a *App) teamLeave(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/")
+}
+
+func (a *App) deleteTeamTx(ctx context.Context, tx pgx.Tx, teamID int64) error {
+	statements := []string{
+		`DELETE FROM nomination_votes WHERE nomination_id IN (SELECT id FROM nominations WHERE author_team_id=$1) OR product_id IN (SELECT id FROM products WHERE team_id=$1)`,
+		`DELETE FROM nominations WHERE author_team_id=$1`,
+		`DELETE FROM product_bumps WHERE product_id IN (SELECT id FROM products WHERE team_id=$1)`,
+		`DELETE FROM products WHERE team_id=$1`,
+		`DELETE FROM team_theme_selections WHERE team_id=$1`,
+		`DELETE FROM team_eligibility_overrides WHERE team_id=$1`,
+		`DELETE FROM team_invites WHERE team_id=$1`,
+		`DELETE FROM team_members WHERE team_id=$1`,
+		`DELETE FROM teams WHERE id=$1`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(ctx, statement, teamID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *App) teamCaptainTransfer(c *gin.Context) {
@@ -994,11 +1028,11 @@ func teamPositiveID(raw string) (int64, bool) {
 }
 
 func teamValidateProfile(name, description string) error {
-	if utf8.RuneCountInString(name) < 2 || utf8.RuneCountInString(name) > 100 || hasControl(name) {
-		return errors.New("Название команды должно содержать от 2 до 100 символов без управляющих знаков.")
+	if utf8.RuneCountInString(name) < 2 || utf8.RuneCountInString(name) > 60 || hasControl(name) {
+		return errors.New("Название команды должно содержать от 2 до 60 символов без управляющих знаков.")
 	}
-	if utf8.RuneCountInString(description) > 3000 || teamHasUnsafeTextControl(description) {
-		return errors.New("Описание должно содержать не более 3000 символов.")
+	if utf8.RuneCountInString(description) > 1000 || teamHasUnsafeTextControl(description) {
+		return errors.New("Описание должно содержать не более 1000 символов.")
 	}
 	return nil
 }

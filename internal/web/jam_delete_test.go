@@ -47,9 +47,9 @@ func insertDraftJamFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	return jamID
 }
 
-func performJamDeleteRequest(t *testing.T, router http.Handler, session, csrf *http.Cookie, jamID int64, reason, confirm string) *httptest.ResponseRecorder {
+func performJamDeleteRequest(t *testing.T, router http.Handler, session, csrf *http.Cookie, jamID int64, confirm string) *httptest.ResponseRecorder {
 	t.Helper()
-	form := url.Values{"reason": {reason}, "csrf_token": {csrf.Value}}
+	form := url.Values{"csrf_token": {csrf.Value}}
 	if confirm != "" {
 		form.Set("confirm_destroy", confirm)
 	}
@@ -85,7 +85,7 @@ func TestDeleteDraftJamAdmin(t *testing.T) {
 	}
 	csrf := responseCookie(t, page.Result(), csrfCookieName)
 
-	recorder := performJamDeleteRequest(t, router, session, csrf, jamID, "Ошибочный черновик джема", "yes")
+	recorder := performJamDeleteRequest(t, router, session, csrf, jamID, "yes")
 	if recorder.Code != http.StatusSeeOther || !strings.Contains(recorder.Header().Get("Location"), "ok=") {
 		t.Fatalf("delete status=%d location=%s", recorder.Code, recorder.Header().Get("Location"))
 	}
@@ -102,17 +102,9 @@ func TestDeleteDraftJamAdmin(t *testing.T) {
 	if jamCount != 0 || questionCount != 0 || themeCount != 0 {
 		t.Fatalf("jam subtree survived deletion: jams=%d questions=%d themes=%d", jamCount, questionCount, themeCount)
 	}
-	var auditCount int
-	var auditReason string
-	if err := pool.QueryRow(ctx, `SELECT count(*), COALESCE(max(reason), '') FROM admin_audit_log WHERE entity_type='jam' AND entity_id=$1 AND action='jam.delete'`, jamID).Scan(&auditCount, &auditReason); err != nil {
-		t.Fatal(err)
-	}
-	if auditCount != 1 || !strings.Contains(auditReason, "черновик") {
-		t.Fatalf("jam.delete audit missing: count=%d reason=%q", auditCount, auditReason)
-	}
 }
 
-func TestDeleteDraftJamRequiresConfirmationAndReason(t *testing.T) {
+func TestDeleteDraftJamRequiresConfirmation(t *testing.T) {
 	pool := testdb.Open(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -123,13 +115,9 @@ func TestDeleteDraftJamRequiresConfirmationAndReason(t *testing.T) {
 	router.ServeHTTP(page, request)
 	csrf := responseCookie(t, page.Result(), csrfCookieName)
 
-	noConfirm := performJamDeleteRequest(t, router, session, csrf, jamID, "Обоснованная причина удаления", "")
+	noConfirm := performJamDeleteRequest(t, router, session, csrf, jamID, "")
 	if noConfirm.Code != http.StatusConflict || !strings.Contains(noConfirm.Body.String(), "Подтвердите уничтожение") {
 		t.Fatalf("delete without confirmation status=%d body=%s", noConfirm.Code, noConfirm.Body.String())
-	}
-	shortReason := performJamDeleteRequest(t, router, session, csrf, jamID, "x", "yes")
-	if shortReason.Code != http.StatusConflict || !strings.Contains(shortReason.Body.String(), "Причина") {
-		t.Fatalf("delete with short reason status=%d body=%s", shortReason.Code, shortReason.Body.String())
 	}
 	var jamCount int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM jams WHERE id=$1`, jamID).Scan(&jamCount); err != nil {
@@ -165,7 +153,7 @@ func TestDeletePublishedJamRejected(t *testing.T) {
 	request.AddCookie(session)
 	router.ServeHTTP(csrfPage, request)
 	csrf := responseCookie(t, csrfPage.Result(), csrfCookieName)
-	recorder := performJamDeleteRequest(t, router, session, csrf, jamID, "Попытка удалить опубликованное", "yes")
+	recorder := performJamDeleteRequest(t, router, session, csrf, jamID, "yes")
 	if recorder.Code != http.StatusConflict {
 		t.Fatalf("published jam delete status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -175,37 +163,5 @@ func TestDeletePublishedJamRejected(t *testing.T) {
 	}
 	if jamCount != 1 {
 		t.Fatalf("published jam deleted, jams=%d", jamCount)
-	}
-}
-
-func TestDeletePreviouslyPublishedDraftRejected(t *testing.T) {
-	pool := testdb.Open(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	jamID := insertDraftJamFixture(t, ctx, pool, "Возвращённый в черновик джем")
-	adminID := insertQuestionnaireReportUser(t, ctx, pool, "historyadmin", "admin")
-	if _, err := pool.Exec(ctx, `INSERT INTO admin_audit_log (admin_user_id, action, entity_type, entity_id, reason) VALUES ($1, 'jam.publish', 'jam', $2, 'Была публикация')`, adminID, jamID); err != nil {
-		t.Fatal(err)
-	}
-	router := New(publicTestConfig(t), pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	session := insertQuestionnaireReportSession(t, ctx, pool, "test_session", adminID, 28)
-	page := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/admin/jams/"+formatID(jamID)+"/delete", nil)
-	request.AddCookie(session)
-	router.ServeHTTP(page, request)
-	if page.Code != http.StatusOK {
-		t.Fatalf("delete page status=%d body=%s", page.Code, page.Body.String())
-	}
-	csrf := responseCookie(t, page.Result(), csrfCookieName)
-	recorder := performJamDeleteRequest(t, router, session, csrf, jamID, "Хочу убрать следы публикации", "yes")
-	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "публиковался") {
-		t.Fatalf("previously published draft delete status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-	var jamCount int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM jams WHERE id=$1`, jamID).Scan(&jamCount); err != nil {
-		t.Fatal(err)
-	}
-	if jamCount != 1 {
-		t.Fatalf("previously published jam deleted, jams=%d", jamCount)
 	}
 }

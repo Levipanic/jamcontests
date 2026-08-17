@@ -77,12 +77,7 @@ func (a *App) adminThemeCreate(c *gin.Context) {
 		a.renderAdminThemes(c, jamID, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminThemes(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
-	a.adminThemeInsert(c, jamID, phrase, 0, reason)
+	a.adminThemeInsert(c, jamID, phrase, 0)
 }
 
 func (a *App) adminThemeCopy(c *gin.Context) {
@@ -93,11 +88,6 @@ func (a *App) adminThemeCopy(c *gin.Context) {
 	sourceID, ok := positiveFormID(c.PostForm("source_theme_id"))
 	if !ok {
 		a.renderAdminThemes(c, jamID, "Укажите исходную тему.", http.StatusUnprocessableEntity)
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminThemes(c, jamID, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 	ctx := c.Request.Context()
@@ -120,7 +110,7 @@ func (a *App) adminThemeCopy(c *gin.Context) {
 		a.themeAdminFailure(c, "load source theme", err)
 		return
 	}
-	if err = a.insertThemeTx(c, tx, jamID, phrase, sourceID, reason); err != nil {
+	if err = a.insertThemeTx(c, tx, jamID, phrase, sourceID); err != nil {
 		a.handleThemeMutationError(c, jamID, "copy theme", err)
 		return
 	}
@@ -131,7 +121,7 @@ func (a *App) adminThemeCopy(c *gin.Context) {
 	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/themes", jamID), "Тема скопирована независимой записью.")
 }
 
-func (a *App) adminThemeInsert(c *gin.Context, jamID int64, phrase string, copiedFromID int64, reason string) {
+func (a *App) adminThemeInsert(c *gin.Context, jamID int64, phrase string, copiedFromID int64) {
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
@@ -143,7 +133,7 @@ func (a *App) adminThemeInsert(c *gin.Context, jamID int64, phrase string, copie
 		a.handleThemeAdminLoadError(c, "lock jam for theme creation", err)
 		return
 	}
-	if err = a.insertThemeTx(c, tx, jamID, phrase, copiedFromID, reason); err != nil {
+	if err = a.insertThemeTx(c, tx, jamID, phrase, copiedFromID); err != nil {
 		a.handleThemeMutationError(c, jamID, "create theme", err)
 		return
 	}
@@ -154,23 +144,17 @@ func (a *App) adminThemeInsert(c *gin.Context, jamID int64, phrase string, copie
 	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/themes", jamID), "Тема добавлена.")
 }
 
-func (a *App) insertThemeTx(c *gin.Context, tx pgx.Tx, jamID int64, phrase string, copiedFromID int64, reason string) error {
-	var themeID int64
+func (a *App) insertThemeTx(c *gin.Context, tx pgx.Tx, jamID int64, phrase string, copiedFromID int64) error {
 	var copiedFrom any
 	if copiedFromID > 0 {
 		copiedFrom = copiedFromID
 	}
-	if err := tx.QueryRow(c.Request.Context(), `
+	if _, err := tx.Exec(c.Request.Context(), `
 		INSERT INTO jam_themes (jam_id, phrase, copied_from_theme_id)
-		VALUES ($1, $2, $3) RETURNING id`, jamID, phrase, copiedFrom).Scan(&themeID); err != nil {
+		VALUES ($1, $2, $3)`, jamID, phrase, copiedFrom); err != nil {
 		return err
 	}
-	after := map[string]any{"id": themeID, "jam_id": jamID, "phrase": phrase, "copied_from_theme_id": copiedFrom, "withdrawn_at": nil}
-	action := "theme.create"
-	if copiedFromID > 0 {
-		action = "theme.copy"
-	}
-	return insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), action, "jam_theme", themeID, reason, nil, after)
+	return nil
 }
 
 func (a *App) adminThemeEdit(c *gin.Context) {
@@ -179,11 +163,6 @@ func (a *App) adminThemeEdit(c *gin.Context) {
 		return
 	}
 	phrase, err := validateThemePhrase(c.PostForm("phrase"))
-	if err != nil {
-		a.renderAdminThemes(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
 	if err != nil {
 		a.renderAdminThemes(c, jamID, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -200,9 +179,8 @@ func (a *App) adminThemeEdit(c *gin.Context) {
 		return
 	}
 	var beforePhrase string
-	var copiedFrom *int64
 	var withdrawn bool
-	err = tx.QueryRow(ctx, `SELECT phrase, copied_from_theme_id, withdrawn_at IS NOT NULL FROM jam_themes WHERE id=$1 AND jam_id=$2 FOR UPDATE`, themeID, jamID).Scan(&beforePhrase, &copiedFrom, &withdrawn)
+	err = tx.QueryRow(ctx, `SELECT phrase, withdrawn_at IS NOT NULL FROM jam_themes WHERE id=$1 AND jam_id=$2 FOR UPDATE`, themeID, jamID).Scan(&beforePhrase, &withdrawn)
 	if err != nil {
 		a.handleThemeAdminLoadError(c, "lock theme for edit", err)
 		return
@@ -228,12 +206,6 @@ func (a *App) adminThemeEdit(c *gin.Context) {
 		a.handleThemeMutationError(c, jamID, "edit theme", err)
 		return
 	}
-	before := themeAuditData(themeID, jamID, beforePhrase, copiedFrom, false)
-	after := themeAuditData(themeID, jamID, phrase, copiedFrom, false)
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "theme.edit", "jam_theme", themeID, reason, before, after); err != nil {
-		a.themeAdminFailure(c, "audit theme edit", err)
-		return
-	}
 	if err = tx.Commit(ctx); err != nil {
 		a.themeAdminFailure(c, "commit theme edit", err)
 		return
@@ -244,11 +216,6 @@ func (a *App) adminThemeEdit(c *gin.Context) {
 func (a *App) adminThemeWithdraw(c *gin.Context) {
 	jamID, themeID, ok := adminThemeIDs(c)
 	if !ok {
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminThemes(c, jamID, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 	if c.PostForm("confirm") != "withdraw" {
@@ -266,10 +233,8 @@ func (a *App) adminThemeWithdraw(c *gin.Context) {
 		a.handleThemeAdminLoadError(c, "lock jam for theme withdrawal", err)
 		return
 	}
-	var phrase string
-	var copiedFrom *int64
 	var withdrawn bool
-	err = tx.QueryRow(ctx, `SELECT phrase, copied_from_theme_id, withdrawn_at IS NOT NULL FROM jam_themes WHERE id=$1 AND jam_id=$2 FOR UPDATE`, themeID, jamID).Scan(&phrase, &copiedFrom, &withdrawn)
+	err = tx.QueryRow(ctx, `SELECT withdrawn_at IS NOT NULL FROM jam_themes WHERE id=$1 AND jam_id=$2 FOR UPDATE`, themeID, jamID).Scan(&withdrawn)
 	if err != nil {
 		a.handleThemeAdminLoadError(c, "lock theme for withdrawal", err)
 		return
@@ -307,12 +272,6 @@ func (a *App) adminThemeWithdraw(c *gin.Context) {
 		a.themeAdminFailure(c, "withdraw theme", err)
 		return
 	}
-	before := themeAuditData(themeID, jamID, phrase, copiedFrom, false)
-	after := themeAuditData(themeID, jamID, phrase, copiedFrom, true)
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "theme.withdraw", "jam_theme", themeID, reason, before, after); err != nil {
-		a.themeAdminFailure(c, "audit theme withdrawal", err)
-		return
-	}
 	if err = tx.Commit(ctx); err != nil {
 		a.themeAdminFailure(c, "commit theme withdrawal", err)
 		return
@@ -335,11 +294,6 @@ func (a *App) adminTeamThemeSelect(c *gin.Context) {
 		a.renderAdminThemes(c, jamID, "Укажите новую тему.", http.StatusUnprocessableEntity)
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminThemes(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
 	ctx := c.Request.Context()
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
@@ -347,15 +301,13 @@ func (a *App) adminTeamThemeSelect(c *gin.Context) {
 		return
 	}
 	defer tx.Rollback(ctx)
-	var teamName string
 	if err = tx.QueryRow(ctx, `
-		SELECT team.name FROM teams team JOIN jams jam ON jam.id=team.jam_id
-		WHERE team.id=$1 AND team.jam_id=$2 FOR UPDATE OF team FOR SHARE OF jam`, teamID, jamID).Scan(&teamName); err != nil {
+		SELECT 1 FROM teams team JOIN jams jam ON jam.id=team.jam_id
+		WHERE team.id=$1 AND team.jam_id=$2 FOR UPDATE OF team FOR SHARE OF jam`, teamID, jamID).Scan(new(int)); err != nil {
 		a.handleThemeAdminLoadError(c, "lock team for theme intervention", err)
 		return
 	}
-	var phrase string
-	if err = tx.QueryRow(ctx, `SELECT phrase FROM jam_themes WHERE id=$1 AND jam_id=$2 AND withdrawn_at IS NULL FOR SHARE`, themeID, jamID).Scan(&phrase); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT 1 FROM jam_themes WHERE id=$1 AND jam_id=$2 AND withdrawn_at IS NULL FOR SHARE`, themeID, jamID).Scan(new(int)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			a.renderAdminThemes(c, jamID, "Активная тема не найдена в этом джеме.", http.StatusUnprocessableEntity)
 			return
@@ -363,20 +315,14 @@ func (a *App) adminTeamThemeSelect(c *gin.Context) {
 		a.themeAdminFailure(c, "load intervention theme", err)
 		return
 	}
-	var before any
 	var oldThemeID int64
-	var oldPhrase string
-	var oldSelectedBy int64
 	err = tx.QueryRow(ctx, `
-		SELECT s.theme_id, t.phrase, s.selected_by_user_id FROM team_theme_selections s
-		JOIN jam_themes t ON t.id=s.theme_id WHERE s.team_id=$1 FOR UPDATE OF s`, teamID).Scan(&oldThemeID, &oldPhrase, &oldSelectedBy)
-	if err == nil {
-		if oldThemeID == themeID {
-			a.renderAdminThemes(c, jamID, "У команды уже выбрана эта тема.", http.StatusConflict)
-			return
-		}
-		before = map[string]any{"team_id": teamID, "team_name": teamName, "theme_id": oldThemeID, "theme_phrase": oldPhrase, "selected_by_user_id": oldSelectedBy}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+		SELECT s.theme_id FROM team_theme_selections s
+		WHERE s.team_id=$1 FOR UPDATE OF s`, teamID).Scan(&oldThemeID)
+	if err == nil && oldThemeID == themeID {
+		a.renderAdminThemes(c, jamID, "У команды уже выбрана эта тема.", http.StatusConflict)
+		return
+	} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		a.themeAdminFailure(c, "load previous team theme", err)
 		return
 	}
@@ -386,11 +332,6 @@ func (a *App) adminTeamThemeSelect(c *gin.Context) {
 		ON CONFLICT (team_id) DO UPDATE SET theme_id=EXCLUDED.theme_id,
 		selected_by_user_id=EXCLUDED.selected_by_user_id, updated_at=now()`, teamID, jamID, themeID, CurrentUser(c).ID); err != nil {
 		a.themeAdminFailure(c, "set team theme as admin", err)
-		return
-	}
-	after := map[string]any{"team_id": teamID, "team_name": teamName, "theme_id": themeID, "theme_phrase": phrase, "selected_by_user_id": CurrentUser(c).ID}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "theme.selection_admin_update", "team_theme_selection", teamID, reason, before, after); err != nil {
-		a.themeAdminFailure(c, "audit team theme intervention", err)
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -583,10 +524,6 @@ func adminThemeIDs(c *gin.Context) (int64, int64, bool) {
 func positiveFormID(raw string) (int64, bool) {
 	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
 	return id, err == nil && id > 0
-}
-
-func themeAuditData(id, jamID int64, phrase string, copiedFrom *int64, withdrawn bool) map[string]any {
-	return map[string]any{"id": id, "jam_id": jamID, "phrase": phrase, "copied_from_theme_id": copiedFrom, "withdrawn": withdrawn}
 }
 
 func isThemePhraseConflict(err error) bool {

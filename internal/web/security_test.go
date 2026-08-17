@@ -196,7 +196,6 @@ func TestPageTemplatesExecute(t *testing.T) {
 		{"admin_users.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"admin_user_detail.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"admin_teams.html", adminControlPageData{User: user, CSRFToken: "token"}},
-		{"admin_audit.html", adminControlPageData{User: user, CSRFToken: "token"}},
 		{"team_new.html", teamPageView{User: user, CSRFToken: "token", JamID: 1}},
 		{"team_detail.html", teamPageView{User: user, CSRFToken: "token", Team: teamDetailView{ID: 1, Name: "Team"}}},
 		{"team_invite.html", teamInviteView{User: user, CSRFToken: "token", TeamID: 1, TeamName: "Team"}},

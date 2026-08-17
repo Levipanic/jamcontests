@@ -12,7 +12,6 @@
 <form class="admin-form admin-danger-block" method="post" action="/admin/users/{{.UserDetail.ID}}/role">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 <label>Новая роль <select name="role">{{if eq .UserDetail.Role "admin"}}<option value="user">user</option><option value="admin" selected>admin</option>{{else}}<option value="user" selected>user</option><option value="admin">admin</option>{{end}}</select></label>
-<label>Причина <input name="reason" minlength="3" maxlength="1000" required></label>
 <label class="admin-check"><input type="checkbox" name="confirm" value="change_role" required> Подтверждаю изменение роли и отзыв всех сессий пользователя</label>
 <button class="admin-danger" type="submit">Изменить роль</button>
 </form></section>

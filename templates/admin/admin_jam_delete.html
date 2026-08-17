@@ -14,13 +14,9 @@
     <p>Название: <strong>{{.Jam.Title}}</strong></p>
     <p>Удаление безвозвратно уничтожит джем и всё его подчинённое содержимое:
        анкету и её вопросы, темы и любые ответы. Команд в джеме: {{.TeamCount}}.</p>
-    <p>Удалить нельзя джем, который когда-либо публиковался: его история хранится как архив.</p>
     {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
     <form method="post" action="/admin/jams/{{.Jam.ID}}/delete">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <label>Причина уничтожения (обязательна, сохраняется в журнале аудита)
-        <textarea name="reason" required minlength="3" maxlength="1000" rows="3"></textarea>
-      </label>
       <label><input type="checkbox" name="confirm_destroy" value="yes" required> Я понимаю: джем-черновик будет уничтожен безвозвратно</label>
       <button class="button-danger" type="submit">Удалить джем</button>
     </form>

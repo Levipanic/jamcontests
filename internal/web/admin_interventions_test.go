@@ -105,25 +105,11 @@ func TestAdminVoteAndBumpInterventionsAffectAuthoritativeCounts(t *testing.T) {
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/votes/"+formatID(newVoteID)+"/invalidate", "invalidate")
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/votes/"+formatID(voteID)+"/restore", "restore")
 	performAdminIntervention(t, router, adminSession, csrfCookie, "/admin/jams/"+formatID(fixture.jamID)+"/bumps/"+formatID(bumpID)+"/restore", "restore")
-	var audits int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM admin_audit_log WHERE action IN ('vote.invalidate','vote.restore','bump.invalidate','bump.restore')`).Scan(&audits); err != nil {
-		t.Fatal(err)
-	}
-	if audits != 6 {
-		t.Fatalf("intervention audits=%d, want 6", audits)
-	}
-	var auditHasMaterialState bool
-	if err := pool.QueryRow(ctx, `SELECT before_data ?& array['invalidated_at','invalidated_by','invalidation_reason'] AND after_data ?& array['invalidated_at','invalidated_by','invalidation_reason'] FROM admin_audit_log WHERE action='bump.invalidate' ORDER BY id DESC LIMIT 1`).Scan(&auditHasMaterialState); err != nil {
-		t.Fatal(err)
-	}
-	if !auditHasMaterialState {
-		t.Fatal("bump intervention audit omitted material invalidation state")
-	}
 }
 
 func performAdminIntervention(t *testing.T, router http.Handler, session, csrf *http.Cookie, path, action string) *httptest.ResponseRecorder {
 	t.Helper()
-	form := url.Values{"reason": {"Исправление недействительной записи"}, "confirm": {action}, "csrf_token": {csrf.Value}}
+	form := url.Values{"confirm": {action}, "csrf_token": {csrf.Value}}
 	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.AddCookie(session)

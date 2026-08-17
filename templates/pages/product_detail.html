@@ -12,7 +12,7 @@
     {{if .Product.CommentaryURL}}<p><a href="{{.Product.CommentaryURL}}" target="_blank" rel="noopener noreferrer nofollow">Комментарий или разбор</a></p>{{end}}
     {{if eq .Product.Status "draft"}}<p><span class="auto-stamp">Сдано автоматически (финальная сдача не была нажата)</span></p>{{end}}
   </section>
-  <section data-bump-product="{{.Product.PublicID}}"><h2>Бампы</h2><p><strong data-bump-count>{{.Product.BumpCount}}</strong></p>{{if and .User .BumpsMutable}}<button type="button" data-bump-action>Бамп</button>{{else if .BumpsMutable}}<a href="/login?next=/products/{{.Product.PublicID}}">Войдите, чтобы бампнуть</a>{{end}}<p role="status" data-bump-status></p></section>
+  <section data-bump-product="{{.Product.PublicID}}"><h2>Лайки</h2><p><strong data-bump-count>{{.Product.BumpCount}}</strong></p>{{if and .User .BumpsMutable}}<button type="button" data-bump-action>Лайк</button>{{else if .BumpsMutable}}<a href="/login?next=/products/{{.Product.PublicID}}">Войдите, чтобы поставить лайк</a>{{end}}<p role="status" data-bump-status></p></section>
   <p><a href="/jams/{{.Product.JamPublicID}}/products">Все продукты джема</a></p>
 </main>{{if .BumpsMutable}}<script src="/static/js/bumps.js" defer></script>{{end}}
 {{template "help_dialog"}}

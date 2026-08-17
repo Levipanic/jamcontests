@@ -142,7 +142,7 @@
                   {{if .Theme}}<span>Тема: {{.Theme}}</span>{{end}}
                   {{if eq .Status "draft"}}<em class="auto-stamp">Сдано автоматически</em>{{end}}
                 </span>
-                <em class="bump-note">Бампы: {{.BumpCount}}</em>
+                <em class="bump-note">Лайки: {{.BumpCount}}</em>
               </span>
             </a>{{end}}
           </div>
@@ -172,6 +172,7 @@
         {{if or (eq .Jam.Stage "voting") (eq .Jam.Stage "finished")}}
         <p><a class="action secondary" href="/jams/{{.Jam.PublicID}}/nominations">Все номинации джема</a></p>
         {{end}}
+        {{if eq .Jam.Stage "finished"}}<p><a class="action secondary" href="/">На главную</a></p>{{end}}
         <p><a href="/archive">Архив завершённых джемов</a></p>
       {{else}}
         <div class="empty-case">

@@ -50,7 +50,7 @@ func TestQuestionnaireResetAndAdminReports(t *testing.T) {
 		t.Fatalf("questionnaire admin status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 	csrfCookie := responseCookie(t, recorder.Result(), csrfCookieName)
-	form := url.Values{"reason": {"Необходимо изменить структуру"}, "confirm": {"СБРОСИТЬ ОТВЕТЫ"}, "csrf_token": {csrfCookie.Value}}
+	form := url.Values{"confirm": {"СБРОСИТЬ ОТВЕТЫ"}, "csrf_token": {csrfCookie.Value}}
 	request := httptest.NewRequest(http.MethodPost, "/admin/jams/"+formatID(jamID)+"/questionnaire/reset", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.AddCookie(sessionCookie)
@@ -60,21 +60,18 @@ func TestQuestionnaireResetAndAdminReports(t *testing.T) {
 	if recorder.Code != http.StatusSeeOther {
 		t.Fatalf("reset status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	var revision, currentResponses, historyEvents, auditEvents int
+	var revision, currentResponses, historyEvents int
 	if err := pool.QueryRow(ctx, `SELECT current_revision FROM questionnaires WHERE id=$1`, questionnaireID).Scan(&revision); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM questionnaire_responses WHERE questionnaire_id=$1 AND revision=2`, questionnaireID).Scan(&currentResponses); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM questionnaire_response_history WHERE response_id=$1 AND event='admin_reset' AND admin_audit_log_id IS NOT NULL`, responseID).Scan(&historyEvents); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM questionnaire_response_history WHERE response_id=$1 AND event='admin_reset'`, responseID).Scan(&historyEvents); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM admin_audit_log WHERE action='questionnaire.responses_reset' AND entity_id=$1`, questionnaireID).Scan(&auditEvents); err != nil {
-		t.Fatal(err)
-	}
-	if revision != 2 || currentResponses != 0 || historyEvents != 1 || auditEvents != 1 {
-		t.Fatalf("unexpected reset state revision=%d responses=%d history=%d audit=%d", revision, currentResponses, historyEvents, auditEvents)
+	if revision != 2 || currentResponses != 0 || historyEvents != 1 {
+		t.Fatalf("unexpected reset state revision=%d responses=%d history=%d", revision, currentResponses, historyEvents)
 	}
 	var clonedQuestionID int64
 	if err := pool.QueryRow(ctx, `SELECT id FROM questionnaire_questions WHERE questionnaire_id=$1 AND revision=2`, questionnaireID).Scan(&clonedQuestionID); err != nil {

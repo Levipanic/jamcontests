@@ -493,11 +493,6 @@ func (a *App) adminProductUpdate(c *gin.Context) {
 		a.renderAdminProducts(c, jamID, "Укажите допустимый статус продукта.", http.StatusUnprocessableEntity)
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderAdminProducts(c, jamID, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
 	if validationErr != nil {
 		a.renderAdminProducts(c, jamID, validationErr.Error(), http.StatusUnprocessableEntity)
 		return
@@ -575,11 +570,6 @@ func (a *App) adminProductUpdate(c *gin.Context) {
 		a.adminProductFailure(c, jamID, "update product as admin", err)
 		return
 	}
-	product.ID, product.JamID, product.TeamID, product.TeamName, product.Status = productID, jamID, before.TeamID, before.TeamName, status
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "product.moderate", "product", productID, reason, productAuditData(before), productAuditData(product)); err != nil {
-		a.adminProductFailure(c, jamID, "audit product moderation", err)
-		return
-	}
 	if err = tx.Commit(ctx); err != nil {
 		a.adminProductFailure(c, jamID, "commit product moderation", err)
 		return
@@ -625,14 +615,6 @@ func (a *App) renderAdminProducts(c *gin.Context, jamID int64, message string, s
 		return
 	}
 	c.HTML(status, "admin_products.html", adminProductsPageData{PageData: PageData{User: CurrentUser(c), CSRFToken: csrfToken(c), Error: message, Ok: c.Query("ok")}, Jam: jam, Products: products, Pager: buildAdminPager(fmt.Sprintf("/admin/jams/%d/products", jamID), page, per, total)})
-}
-
-func productAuditData(product ProductView) map[string]any {
-	return map[string]any{
-		"id": product.ID, "jam_id": product.JamID, "team_id": product.TeamID,
-		"title": product.Title, "result_url": product.ResultURL, "description": product.Description,
-		"commentary_url": product.CommentaryURL, "notes": product.Notes, "status": product.Status,
-	}
 }
 
 func productMaterialEqual(before, after ProductView, afterStatus string) bool {

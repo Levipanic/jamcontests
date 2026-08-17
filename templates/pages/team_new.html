@@ -25,10 +25,10 @@
     <form method="post" action="/jams/{{.PublicJamID}}/teams/new" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <label>Название
-        <input name="name" required minlength="2" maxlength="100" autocomplete="off">
+        <input name="name" required minlength="2" maxlength="60" autocomplete="off">
       </label>
       <label>Описание
-        <textarea name="description" maxlength="3000" rows="8"></textarea>
+        <textarea name="description" maxlength="1000" rows="8"></textarea>
       </label>
       <label>Аватар команды (JPEG, PNG или WebP)
         <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp">

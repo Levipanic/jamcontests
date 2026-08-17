@@ -20,9 +20,9 @@
 {{if .TextLimit}}<p class="admin-meta">Лимит текста: {{.TextLimit}}</p>{{end}}
 {{if .SelectionLimit}}<p class="admin-meta">Лимит выбора: {{.SelectionLimit}}</p>{{end}}
 {{if .Options}}<ul class="admin-list">{{range .Options}}<li>{{.}}</li>{{end}}</ul>{{end}}
-{{if not $.QuestionnaireLocked}}<p class="admin-actions"><a href="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/edit">Редактировать</a></p><form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/delete"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><label>Причина удаления <input name="reason" minlength="3" maxlength="1000" required></label><button class="admin-danger" type="submit">Удалить вопрос</button></form>{{end}}
+{{if not $.QuestionnaireLocked}}<p class="admin-actions"><a href="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/edit">Редактировать</a></p><form class="admin-form admin-danger-block" method="post" action="/admin/jams/{{$.Jam.ID}}/questionnaire/questions/{{.ID}}/delete"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button class="admin-danger" type="submit">Удалить вопрос</button></form>{{end}}
 </li>{{end}}</ol>
-{{if not .QuestionnaireLocked}}<form class="admin-form admin-reorder" method="post" action="/admin/jams/{{.Jam.ID}}/questionnaire/order"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="order" id="questionOrderValue" value=""><label>Причина перестановки <input name="reason" minlength="3" maxlength="1000" required></label><button type="submit">Применить порядок</button></form>
+{{if not .QuestionnaireLocked}}<form class="admin-form admin-reorder" method="post" action="/admin/jams/{{.Jam.ID}}/questionnaire/order"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="order" id="questionOrderValue" value=""><button type="submit">Применить порядок</button></form>
 <script>
 (function () {
   var list = document.getElementById("questionOrder");
@@ -91,8 +91,8 @@
 <div class="admin-field questionFieldMultiple"><label>Лимит выбранных вариантов (только multiple_choice) <input type="number" min="1" name="selection_limit" value="{{.QuestionForm.SelectionLimit}}"></label></div>
 <div class="admin-field questionFieldChoice"><label>Варианты, по одному в строке (для choice) <textarea name="options">{{.QuestionForm.Options}}</textarea></label></div>
 {{if .EditingQuestion}}<label>Позиция, начиная с 0 <input type="number" min="0" name="position" value="{{.QuestionForm.Position}}"></label>{{end}}
-<label>Причина изменения <textarea name="reason" minlength="3" maxlength="1000" required>{{.QuestionForm.Reason}}</textarea></label><button type="submit">{{if .EditingQuestion}}Сохранить вопрос{{else}}Добавить вопрос{{end}}</button></form></section>{{end}}
-{{if and .QuestionnaireLocked (eq .Jam.Visibility "draft") (eq .Jam.Stage "upcoming")}}<section class="admin-section admin-danger-block"><h2>Сбросить текущие ответы</h2><p class="admin-help">Будет создана новая ревизия с копией структуры. Текущие ответы перестанут влиять на допуск, но останутся в неизменяемой истории. Действие необратимо.</p><form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/questionnaire/reset"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Причина сброса <textarea name="reason" minlength="3" maxlength="1000" required></textarea></label><label>Для подтверждения введите «СБРОСИТЬ ОТВЕТЫ» <input name="confirm" required></label><button class="admin-danger" type="submit">Создать новую ревизию</button></form></section>{{end}}
+<button type="submit">{{if .EditingQuestion}}Сохранить вопрос{{else}}Добавить вопрос{{end}}</button></form></section>{{end}}
+{{if and .QuestionnaireLocked (eq .Jam.Visibility "draft") (eq .Jam.Stage "upcoming")}}<section class="admin-section admin-danger-block"><h2>Сбросить текущие ответы</h2><p class="admin-help">Будет создана новая ревизия с копией структуры. Текущие ответы перестанут влиять на допуск, но останутся в неизменяемой истории. Действие необратимо.</p><form class="admin-form" method="post" action="/admin/jams/{{.Jam.ID}}/questionnaire/reset"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Для подтверждения введите «СБРОСИТЬ ОТВЕТЫ» <input name="confirm" required></label><button class="admin-danger" type="submit">Создать новую ревизию</button></form></section>{{end}}
 </main>
 {{template "admin_footer" .}}
 {{end}}

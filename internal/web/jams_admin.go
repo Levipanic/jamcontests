@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -45,7 +44,6 @@ type adminJamForm struct {
 	VotingStarts     string
 	Finishes         string
 	MaxTeamSize      string
-	Reason           string
 }
 
 type adminQuestion struct {
@@ -72,7 +70,6 @@ type adminQuestionForm struct {
 	SelectionLimit string
 	Position       string
 	Options        string
-	Reason         string
 }
 
 type jamAdminPageData struct {
@@ -150,7 +147,6 @@ func defaultAdminJamForm(now time.Time) adminJamForm {
 		VotingStarts:     format(submission.Add(9 * 24 * time.Hour)),
 		Finishes:         format(submission.Add(11 * 24 * time.Hour)),
 		MaxTeamSize:      "5",
-		Reason:           "Создание нового джема",
 	}
 }
 
@@ -209,11 +205,6 @@ func (a *App) createDemoJamAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "insert demo question", err)
 		return
 	}
-	after := map[string]any{"id": jamID, "title": "Тестовое дело", "visibility": "published", "demo": true}
-	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), "jam.demo_create", "jam", jamID, "Создание тестового джема в development", nil, after); err != nil {
-		a.jamAdminFailure(c, "audit demo jam", err)
-		return
-	}
 	if err = tx.Commit(c.Request.Context()); err != nil {
 		a.jamAdminFailure(c, "commit demo jam", err)
 		return
@@ -232,7 +223,6 @@ func (a *App) createJamAdmin(c *gin.Context) {
 		a.renderJamAdmin(c, http.StatusUnprocessableEntity, "admin_jam_form.html", jamAdminPageData{PageData: PageData{Error: "Начало приёма работ должно быть в будущем — расписание нового джема не может начинаться в прошлом."}, JamForm: form, MoscowZone: "Europe/Moscow"})
 		return
 	}
-	user := CurrentUser(c)
 	tx, err := a.pool.Begin(c.Request.Context())
 	if err != nil {
 		a.jamAdminFailure(c, "begin jam creation", err)
@@ -256,11 +246,6 @@ func (a *App) createJamAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "insert jam questionnaire", err)
 		return
 	}
-	after := jamAuditData(jamID, values, "draft", nil)
-	if err = insertAdminAudit(c.Request.Context(), tx, user, "jam.create", "jam", jamID, values.Reason, nil, after); err != nil {
-		a.jamAdminFailure(c, "audit jam creation", err)
-		return
-	}
 	if err = tx.Commit(c.Request.Context()); err != nil {
 		a.jamAdminFailure(c, "commit jam creation", err)
 		return
@@ -278,7 +263,7 @@ func (a *App) editJamAdminPage(c *gin.Context) {
 		a.handleAdminLoadError(c, "load jam for editing", err)
 		return
 	}
-	a.renderJamAdmin(c, http.StatusOK, "admin_jam_form.html", jamAdminPageData{Jam: jam, JamForm: jamFormFromJam(*jam), MoscowZone: "Europe/Moscow"})
+	a.renderJamAdmin(c, http.StatusOK, "admin_jam_form.html", jamAdminPageData{PageData: PageData{Error: c.Query("error"), Ok: c.Query("ok")}, Jam: jam, JamForm: jamFormFromJam(*jam), MoscowZone: "Europe/Moscow"})
 }
 
 func (a *App) updateJamAdmin(c *gin.Context) {
@@ -357,11 +342,6 @@ func (a *App) updateJamAdmin(c *gin.Context) {
 		a.jamAdminFailure(c, "update jam", err)
 		return
 	}
-	after := jamAuditData(jamID, values, before.Visibility, before.Schedule.Override)
-	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), "jam.update", "jam", jamID, values.Reason, jamRecordAuditData(*before), after); err != nil {
-		a.jamAdminFailure(c, "audit jam update", err)
-		return
-	}
 	if err = tx.Commit(c.Request.Context()); err != nil {
 		a.jamAdminFailure(c, "commit jam update", err)
 		return
@@ -380,11 +360,6 @@ func (a *App) unpublishJamAdmin(c *gin.Context) {
 func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 	jamID, ok := adminID(c, "id")
 	if !ok {
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderJamActionError(c, jamID, err.Error())
 		return
 	}
 	tx, err := a.pool.Begin(c.Request.Context())
@@ -443,16 +418,6 @@ func (a *App) setJamVisibility(c *gin.Context, visibility string) {
 		a.renderJamActionError(c, jamID, "Завершённый джем должен оставаться опубликованным в архиве.")
 		return
 	}
-	after := jamRecordAuditData(*jam)
-	after["visibility"] = visibility
-	action := "jam.publish"
-	if visibility == "draft" {
-		action = "jam.unpublish"
-	}
-	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), action, "jam", jamID, reason, jamRecordAuditData(*jam), after); err != nil {
-		a.jamAdminFailure(c, "audit jam visibility", err)
-		return
-	}
 	if err = tx.Commit(c.Request.Context()); err != nil {
 		a.jamAdminFailure(c, "commit jam visibility", err)
 		return
@@ -496,11 +461,6 @@ func (a *App) autoJamAdmin(c *gin.Context) {
 func (a *App) setJamOverride(c *gin.Context, override *Stage) {
 	jamID, ok := adminID(c, "id")
 	if !ok {
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderJamActionError(c, jamID, err.Error())
 		return
 	}
 	tx, err := a.pool.Begin(c.Request.Context())
@@ -552,16 +512,6 @@ func (a *App) setJamOverride(c *gin.Context, override *Stage) {
 	}
 	if _, err = tx.Exec(c.Request.Context(), `UPDATE jams SET status_override=$2, updated_at=now() WHERE id=$1`, jamID, value); err != nil {
 		a.jamAdminFailure(c, "update jam override", err)
-		return
-	}
-	after := jamRecordAuditData(*jam)
-	after["status_override"] = value
-	action := "jam.override"
-	if override == nil {
-		action = "jam.auto_stage"
-	}
-	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), action, "jam", jamID, reason, jamRecordAuditData(*jam), after); err != nil {
-		a.jamAdminFailure(c, "audit jam override", err)
 		return
 	}
 	if err = tx.Commit(c.Request.Context()); err != nil {
@@ -628,11 +578,6 @@ func (a *App) deleteJamAdmin(c *gin.Context) {
 	if !ok {
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderJamDeleteError(c, jamID, err.Error())
-		return
-	}
 	if c.PostForm("confirm_destroy") != "yes" {
 		a.renderJamDeleteError(c, jamID, "Подтвердите уничтожение джема-черновика.")
 		return
@@ -656,19 +601,6 @@ func (a *App) deleteJamAdmin(c *gin.Context) {
 		a.renderJamDeleteError(c, jamID, "Удалять можно только неопубликованный джем-черновик.")
 		return
 	}
-	var wasPublished bool
-	if err = tx.QueryRow(c.Request.Context(), `
-		SELECT EXISTS (
-			SELECT 1 FROM admin_audit_log
-			WHERE entity_type='jam' AND entity_id=$1 AND action IN ('jam.publish', 'jam.demo_create')
-		)`, jamID).Scan(&wasPublished); err != nil {
-		a.jamAdminFailure(c, "check jam publication history", err)
-		return
-	}
-	if wasPublished {
-		a.renderJamDeleteError(c, jamID, "Джем уже публиковался — его историю удалять нельзя.")
-		return
-	}
 	var teams int
 	if err = tx.QueryRow(c.Request.Context(), `SELECT count(*) FROM teams WHERE jam_id=$1`, jamID).Scan(&teams); err != nil {
 		a.jamAdminFailure(c, "count jam teams", err)
@@ -676,10 +608,6 @@ func (a *App) deleteJamAdmin(c *gin.Context) {
 	}
 	if teams > 0 {
 		a.renderJamDeleteError(c, jamID, "В джеме уже есть команды — удалить его нельзя.")
-		return
-	}
-	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), "jam.delete", "jam", jamID, reason, jamRecordAuditData(*jam), map[string]any{"deleted": true}); err != nil {
-		a.jamAdminFailure(c, "audit jam deletion", err)
 		return
 	}
 	for _, statement := range jamDeleteChildStatements {
@@ -777,7 +705,6 @@ func (a *App) mutateQuestionAdmin(c *gin.Context, editing bool) {
 		return
 	}
 
-	var before any
 	var questionID int64
 	if editing {
 		existing, loadErr := loadAdminQuestionTx(c.Request.Context(), tx, questionnaireID, form.ID, true)
@@ -785,7 +712,6 @@ func (a *App) mutateQuestionAdmin(c *gin.Context, editing bool) {
 			a.handleAdminLoadError(c, "lock questionnaire question", loadErr)
 			return
 		}
-		before = questionAuditData(*existing)
 		questionID = existing.ID
 		if _, err = tx.Exec(c.Request.Context(), `DELETE FROM questionnaire_options WHERE question_id=$1`, questionID); err != nil {
 			a.jamAdminFailure(c, "replace question options", err)
@@ -827,14 +753,6 @@ func (a *App) mutateQuestionAdmin(c *gin.Context, editing bool) {
 		}
 	}
 	question.ID = questionID
-	action := "questionnaire.question_create"
-	if editing {
-		action = "questionnaire.question_update"
-	}
-	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), action, "questionnaire_question", questionID, question.Reason, before, questionAuditData(question)); err != nil {
-		a.jamAdminFailure(c, "audit questionnaire question", err)
-		return
-	}
 	if err = tx.Commit(c.Request.Context()); err != nil {
 		a.jamAdminFailure(c, "commit questionnaire question", err)
 		return
@@ -855,11 +773,6 @@ func (a *App) deleteQuestionAdmin(c *gin.Context) {
 	if !ok {
 		return
 	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
 	tx, err := a.pool.Begin(c.Request.Context())
 	if err != nil {
 		a.jamAdminFailure(c, "begin question deletion", err)
@@ -876,14 +789,10 @@ func (a *App) deleteQuestionAdmin(c *gin.Context) {
 		a.handleAdminLoadError(c, "lock questionnaire for deletion", err)
 		return
 	}
+	_ = questionnaireID
 	if locked {
 		tx.Rollback(c.Request.Context())
 		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, "Удаление заблокировано после первого сохранённого ответа.", http.StatusConflict)
-		return
-	}
-	question, err := loadAdminQuestionTx(c.Request.Context(), tx, questionnaireID, questionID, true)
-	if err != nil {
-		a.handleAdminLoadError(c, "lock question for deletion", err)
 		return
 	}
 	if _, err = tx.Exec(c.Request.Context(), `DELETE FROM questionnaire_options WHERE question_id=$1`, questionID); err != nil {
@@ -892,10 +801,6 @@ func (a *App) deleteQuestionAdmin(c *gin.Context) {
 	}
 	if _, err = tx.Exec(c.Request.Context(), `DELETE FROM questionnaire_questions WHERE id=$1`, questionID); err != nil {
 		a.jamAdminFailure(c, "delete questionnaire question", err)
-		return
-	}
-	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), "questionnaire.question_delete", "questionnaire_question", questionID, reason, questionAuditData(*question), nil); err != nil {
-		a.jamAdminFailure(c, "audit question deletion", err)
 		return
 	}
 	if err = tx.Commit(c.Request.Context()); err != nil {
@@ -907,15 +812,10 @@ func (a *App) deleteQuestionAdmin(c *gin.Context) {
 
 // questionnaireOrderAdmin applies a complete new question order for the
 // current questionnaire revision. The submitted set must match the existing
-// questions exactly; every change is audited.
+// questions exactly.
 func (a *App) questionnaireOrderAdmin(c *gin.Context) {
 	jamID, ok := adminID(c, "id")
 	if !ok {
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 	var requested []int64
@@ -1020,18 +920,6 @@ func (a *App) questionnaireOrderAdmin(c *gin.Context) {
 			return
 		}
 	}
-	before := make([]map[string]any, 0, len(current))
-	for _, question := range current {
-		before = append(before, map[string]any{"id": question.ID, "position": question.Position})
-	}
-	after := make([]map[string]any, 0, len(ordered))
-	for _, question := range ordered {
-		after = append(after, map[string]any{"id": question.ID, "position": question.Position})
-	}
-	if err = insertAdminAudit(ctx, tx, CurrentUser(c), "questionnaire.question_order", "questionnaire_question", questionnaireID, reason, before, after); err != nil {
-		a.jamAdminFailure(c, "audit questionnaire order", err)
-		return
-	}
 	if err = tx.Commit(ctx); err != nil {
 		a.jamAdminFailure(c, "commit questionnaire order", err)
 		return
@@ -1042,11 +930,6 @@ func (a *App) questionnaireOrderAdmin(c *gin.Context) {
 func (a *App) resetQuestionnaireAdmin(c *gin.Context) {
 	jamID, ok := adminID(c, "id")
 	if !ok {
-		return
-	}
-	reason, err := validateReason(c.PostForm("reason"))
-	if err != nil {
-		a.renderQuestionnaireAdmin(c, jamID, adminQuestionForm{}, false, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 	if c.PostForm("confirm") != "СБРОСИТЬ ОТВЕТЫ" {
@@ -1098,7 +981,6 @@ func (a *App) resetQuestionnaireAdmin(c *gin.Context) {
 		snapshot []byte
 	}
 	var responses []resetResponse
-	drafts, completed := 0, 0
 	for rows.Next() {
 		var response resetResponse
 		if err = rows.Scan(&response.id, &response.status); err != nil {
@@ -1107,11 +989,6 @@ func (a *App) resetQuestionnaireAdmin(c *gin.Context) {
 			return
 		}
 		responses = append(responses, response)
-		if response.status == "completed" {
-			completed++
-		} else {
-			drafts++
-		}
 	}
 	if err = rows.Err(); err != nil {
 		rows.Close()
@@ -1130,23 +1007,11 @@ func (a *App) resetQuestionnaireAdmin(c *gin.Context) {
 			return
 		}
 	}
-	var questionCount int
-	if err = tx.QueryRow(ctx, `SELECT count(*) FROM questionnaire_questions WHERE questionnaire_id=$1 AND revision=$2`, questionnaireID, revision).Scan(&questionCount); err != nil {
-		a.jamAdminFailure(c, "count questionnaire reset questions", err)
-		return
-	}
 	newRevision := revision + 1
-	before := map[string]any{"questionnaire_id": questionnaireID, "revision": revision, "question_count": questionCount, "response_count": len(responses), "draft_count": drafts, "completed_count": completed}
-	after := map[string]any{"questionnaire_id": questionnaireID, "revision": newRevision, "source_revision": revision, "question_count": questionCount, "response_count": 0, "reset_history_events": len(responses)}
-	auditID, err := insertAdminAuditReturningID(ctx, tx, CurrentUser(c), "questionnaire.responses_reset", "questionnaire", questionnaireID, reason, before, after)
-	if err != nil {
-		a.jamAdminFailure(c, "audit questionnaire reset", err)
-		return
-	}
 	for _, response := range responses {
 		if _, err = tx.Exec(ctx, `
-			INSERT INTO questionnaire_response_history (response_id, event, snapshot, admin_audit_log_id)
-			VALUES ($1, 'admin_reset', $2::jsonb, $3)`, response.id, string(response.snapshot), auditID); err != nil {
+			INSERT INTO questionnaire_response_history (response_id, event, snapshot)
+			VALUES ($1, 'admin_reset', $2::jsonb)`, response.id, string(response.snapshot)); err != nil {
 			a.jamAdminFailure(c, "record questionnaire reset history", err)
 			return
 		}
@@ -1517,80 +1382,12 @@ func hasOtherActivePublishedJam(ctx context.Context, tx pgx.Tx, jamID int64, now
 	return exists, err
 }
 
-func insertAdminAudit(ctx context.Context, tx pgx.Tx, user *User, action, entityType string, entityID int64, reason string, before, after any) error {
-	_, err := insertAdminAuditReturningID(ctx, tx, user, action, entityType, entityID, reason, before, after)
-	return err
-}
-
-func insertAdminAuditReturningID(ctx context.Context, tx pgx.Tx, user *User, action, entityType string, entityID int64, reason string, before, after any) (int64, error) {
-	if user == nil {
-		return 0, errors.New("missing administrator in request context")
-	}
-	var currentRole string
-	if err := tx.QueryRow(ctx, `SELECT role FROM users WHERE id=$1 FOR KEY SHARE`, user.ID).Scan(&currentRole); err != nil {
-		return 0, err
-	}
-	if currentRole != "admin" {
-		return 0, errors.New("administrator role was revoked during the request")
-	}
-	beforeJSON, err := auditJSON(before)
-	if err != nil {
-		return 0, err
-	}
-	afterJSON, err := auditJSON(after)
-	if err != nil {
-		return 0, err
-	}
-	var auditID int64
-	err = tx.QueryRow(ctx, `
-		INSERT INTO admin_audit_log (admin_user_id, action, entity_type, entity_id, reason, before_data, after_data)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb) RETURNING id`,
-		user.ID, action, entityType, entityID, reason, beforeJSON, afterJSON).Scan(&auditID)
-	return auditID, err
-}
-
-func auditJSON(value any) (any, error) {
-	if value == nil {
-		return nil, nil
-	}
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	return string(encoded), nil
-}
-
-func jamAuditData(jamID int64, form adminJamFormValues, visibility string, override *Stage) map[string]any {
-	var overrideValue any
-	if override != nil {
-		overrideValue = string(*override)
-	}
-	return map[string]any{
-		"id": jamID, "title": form.Title, "description": form.Description, "rules": form.Rules,
-		"visibility": visibility, "submission_starts_at": form.Schedule.SubmissionStartsAt,
-		"evaluation_starts_at": form.Schedule.EvaluationStartsAt, "voting_starts_at": form.Schedule.VotingStartsAt,
-		"finishes_at": form.Schedule.FinishesAt, "status_override": overrideValue, "max_team_size": form.MaxTeamSize,
-	}
-}
-
-func jamRecordAuditData(jam adminJam) map[string]any {
-	values := adminJamFormValues{Title: jam.Title, Description: jam.Description, Rules: jam.Rules, Schedule: jam.Schedule, MaxTeamSize: jam.MaxTeamSize}
-	return jamAuditData(jam.ID, values, jam.Visibility, jam.Schedule.Override)
-}
-
-func questionAuditData(question adminQuestion) map[string]any {
-	return map[string]any{"id": question.ID, "type": question.Type, "prompt": question.Prompt, "hint": question.Hint,
-		"required": question.Required, "text_limit": nullablePositive(question.TextLimit),
-		"selection_limit": nullablePositive(question.SelectionLimit), "position": question.Position, "options": question.Options}
-}
-
 type adminJamFormValues struct {
 	Title       string
 	Description string
 	Rules       string
 	Schedule    Schedule
 	MaxTeamSize int
-	Reason      string
 }
 
 func parseJamForm(form adminJamForm) (adminJamFormValues, error) {
@@ -1632,10 +1429,6 @@ func parseJamForm(form adminJamForm) (adminJamFormValues, error) {
 		!values.Schedule.EvaluationStartsAt.Before(values.Schedule.VotingStartsAt) ||
 		!values.Schedule.VotingStartsAt.Before(values.Schedule.FinishesAt) {
 		return values, errors.New("Границы расписания должны идти строго по порядку: начало сдачи < начало оценки < начало голосования < завершение.")
-	}
-	values.Reason, err = validateReason(form.Reason)
-	if err != nil {
-		return values, err
 	}
 	return values, nil
 }
@@ -1699,26 +1492,14 @@ func parseQuestionForm(form adminQuestionForm) (adminQuestion, error) {
 	default:
 		return question, errors.New("Выберите поддерживаемый тип вопроса.")
 	}
-	question.Reason, err = validateReason(form.Reason)
-	if err != nil {
-		return question, err
-	}
 	return question, nil
-}
-
-func validateReason(value string) (string, error) {
-	reason := strings.TrimSpace(value)
-	if utf8.RuneCountInString(reason) < 3 || utf8.RuneCountInString(reason) > 1000 {
-		return "", errors.New("Причина должна содержать от 3 до 1000 символов.")
-	}
-	return reason, nil
 }
 
 func jamFormFromRequest(c *gin.Context) adminJamForm {
 	return adminJamForm{Title: c.PostForm("title"), Description: c.PostForm("description"), Rules: c.PostForm("rules"),
 		SubmissionStarts: c.PostForm("submission_starts_at"), EvaluationStarts: c.PostForm("evaluation_starts_at"),
 		VotingStarts: c.PostForm("voting_starts_at"), Finishes: c.PostForm("finishes_at"),
-		MaxTeamSize: c.PostForm("max_team_size"), Reason: c.PostForm("reason")}
+		MaxTeamSize: c.PostForm("max_team_size")}
 }
 
 func jamFormFromJam(jam adminJam) adminJamForm {
@@ -1731,7 +1512,7 @@ func questionFormFromRequest(c *gin.Context) adminQuestionForm {
 	return adminQuestionForm{Type: c.PostForm("type"), Prompt: c.PostForm("prompt"), Hint: c.PostForm("hint"),
 		Required: c.PostForm("required") == "on", TextLimit: c.PostForm("text_limit"),
 		SelectionLimit: c.PostForm("selection_limit"), Position: c.PostForm("position"),
-		Options: c.PostForm("options"), Reason: c.PostForm("reason")}
+		Options: c.PostForm("options")}
 }
 
 func questionFormFromQuestion(question adminQuestion) adminQuestionForm {
