@@ -919,9 +919,12 @@ func (a *App) teamStoreAvatar(c *gin.Context) (string, bool, error) {
 		return "", false, errors.New("Аватар превышает допустимый размер.")
 	}
 	contentType := http.DetectContentType(data)
-	extension := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[contentType]
-	if extension == "" {
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
 		return "", false, errors.New("Допустимы только изображения JPEG, PNG или WebP.")
+	}
+	processed, extension, err := processAvatar(data)
+	if err != nil {
+		return "", false, err
 	}
 	if err := os.MkdirAll(a.config.AvatarDir, 0o750); err != nil {
 		a.logger.Error("create avatar directory", "error", err)
@@ -939,7 +942,7 @@ func (a *App) teamStoreAvatar(c *gin.Context) (string, bool, error) {
 		a.logger.Error("create avatar file", "error", err)
 		return "", false, errors.New("Не удалось сохранить аватар. Попробуйте позже.")
 	}
-	if _, err := stored.Write(data); err != nil {
+	if _, err := stored.Write(processed); err != nil {
 		stored.Close()
 		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 			a.logger.Warn("remove incomplete avatar", "error", removeErr)

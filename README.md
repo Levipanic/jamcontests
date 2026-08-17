@@ -100,9 +100,11 @@ go test ./... -race -count=1
 
 ## Производственный запуск
 
-- Аватары команд хранятся в `storage/avatars/` на локальном диске; каталог и PostgreSQL
-  входят в резервное копирование (`scripts/backup.sh`, `scripts/verify-backup.sh`,
-  `docs/backup-restore.md`).
+- Аватары команд хранятся в `storage/avatars/` на локальном диске; при загрузке они
+  декодируются, уменьшаются до 256px и перекодируются (JPEG/PNG, не более 256KB
+  на файл), поэтому диск не переполняется даже при враждебных загрузках; каталог
+  и PostgreSQL входят в резервное копирование (`scripts/backup.sh`,
+  `scripts/verify-backup.sh`, `docs/backup-restore.md`).
 - В production обязательны отдельная `MIGRATION_DATABASE_URL` (роль-владелец схемы),
   runtime-роль с минимальными правами (для `admin_audit_log` — только `SELECT`/`INSERT`),
   `APP_ENV=production` и `TRUSTED_PROXIES` за реверс-прокси.
