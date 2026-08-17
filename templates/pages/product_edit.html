@@ -2,7 +2,7 @@
 <!doctype html><html lang="ru"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
-  <title>Продукт команды {{.TeamName}}</title><link rel="stylesheet" href="/static/css/app.css">
+  <title>Продукт команды {{.TeamName}}</title><link rel="stylesheet" href="/static/css/app.css?v=2">
 </head><body><main class="dossier">
   <article><p class="eyebrow">Карточка результата / команда «{{.TeamName}}»</p><h1>Продукт команды {{.TeamName}}</h1>{{template "help_trigger"}}
     <p>Статус: <strong>{{if eq .Product.Status "final"}}финально сдан{{else}}черновик{{end}}</strong></p>
