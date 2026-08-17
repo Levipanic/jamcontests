@@ -15,7 +15,7 @@
     <article>
       <header>
         <p>Командное дело № {{.Team.PublicID}}</p>
-        <h1>{{.Team.Name}}</h1>
+        <h1>{{.Team.Name}}</h1>{{template "help_trigger"}}
       </header>
       {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
       {{if .Team.AvatarPath}}<img src="/avatars/{{.Team.AvatarPath}}" alt="Аватар команды {{.Team.Name}}" width="240" height="240">{{end}}
@@ -109,6 +109,8 @@
     {{end}}
     <p><a href="/jams/{{.Team.PublicJamID}}">Вернуться к джему</a></p>
   </main>
+{{template "help_dialog"}}
+<script src="/static/js/app.js?v=2" defer></script>
 </body>
 </html>
 {{end}}

@@ -93,14 +93,36 @@
     const dots = helpDialog?.querySelector("[data-help-dots]");
     if (dots) dots.textContent = (helpIndex + 1) + " / " + helpCards.length;
   }
+  function openHelp() {
+    if (!helpDialog) return;
+    showHelpCard(0);
+    if (helpDialog.open) return;
+    if (typeof helpDialog.showModal === "function") {
+      try {
+        helpDialog.showModal();
+        return;
+      } catch (error) {
+        // Fall through to the attribute fallback below.
+      }
+    }
+    helpDialog.setAttribute("open", "");
+    helpDialog.classList.add("open-fallback");
+  }
+  function closeHelp() {
+    if (helpDialog.open && typeof helpDialog.close === "function") {
+      try {
+        helpDialog.close();
+      } catch (error) {
+        // Fall through to attribute removal.
+      }
+    }
+    helpDialog.removeAttribute("open");
+    helpDialog.classList.remove("open-fallback");
+  }
   document.querySelectorAll("[data-help-open]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (!helpDialog) return;
-      showHelpCard(0);
-      if (!helpDialog.open) helpDialog.showModal();
-    });
+    button.addEventListener("click", openHelp);
   });
-  helpDialog?.querySelector("[data-help-close]")?.addEventListener("click", () => helpDialog.close());
+  helpDialog?.querySelector("[data-help-close]")?.addEventListener("click", closeHelp);
   helpDialog?.querySelector("[data-help-prev]")?.addEventListener("click", () => showHelpCard(helpIndex - 1));
   helpDialog?.querySelector("[data-help-next]")?.addEventListener("click", () => showHelpCard(helpIndex + 1));
   helpDialog?.addEventListener("keydown", (event) => {

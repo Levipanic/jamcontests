@@ -13,7 +13,7 @@
   <main class="dossier">
     <header>
       <p>Дело джема № {{.PublicJamID}}</p>
-      <h1>Завести дело команды</h1>
+      <h1>Завести дело команды</h1>{{template "help_trigger"}}
     </header>
     {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
     {{if .Rules}}
@@ -40,6 +40,8 @@
     </form>
     <p><a href="/jams/{{.PublicJamID}}">Вернуться к джему</a></p>
   </main>
+{{template "help_dialog"}}
+<script src="/static/js/app.js?v=2" defer></script>
 </body>
 </html>
 {{end}}

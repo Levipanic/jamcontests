@@ -1,0 +1,33 @@
+{{define "help_trigger"}}<button class="help-trigger" type="button" data-help-open aria-label="Справка по джему">?</button>{{end}}
+{{define "help_dialog"}}<dialog class="help-dossier" id="help-dossier" aria-labelledby="help-title">
+  <button class="dialog-close" type="button" data-help-close aria-label="Закрыть">×</button>
+  <p class="eyebrow">Памятка участника</p>
+  <h2 id="help-title">Как устроен джем</h2>
+  <div class="help-cards">
+    <section class="help-card" data-help-card>
+      <h3>1. Сбор и анкета</h3>
+      <p>В стадии «Сбор» команда создаётся одной кнопкой, участники присоединяются по приглашению капитана. Каждый участник заполняет анкету: без завершённого ответа команда не получит допуск.</p>
+    </section>
+    <section class="help-card" data-help-card>
+      <h3>2. Стадии</h3>
+      <p>Дело идёт по отметкам: Сбор → Сдача → Оценка → Голосование → Финал. Границы видно над таймером и в расписании. Когда таймер доходит до нуля, страница сама обновится и покажет новую стадию.</p>
+    </section>
+    <section class="help-card" data-help-card>
+      <h3>3. Сдача продукта</h3>
+      <p>В «Сдаче» капитан выбирает тему команды и заполняет карточку продукта: название, ссылку на результат, описание. Если до конца стадии не нажали «Сдать финально», черновик будет сдан автоматически.</p>
+    </section>
+    <section class="help-card" data-help-card>
+      <h3>4. Оценка и голосование</h3>
+      <p>В «Оценке» работы всех команд открываются для просмотра, можно бампнуть любую понравившуюся (раз в минуту). В «Голосовании» по каждой номинации можно выбрать один продукт — голос можно менять до конца стадии.</p>
+    </section>
+    <section class="help-card" data-help-card>
+      <h3>5. Итоги и архив</h3>
+      <p>В «Финале» появляются победители номинаций и авторство предложенных командами номинаций. Завершённые джемы остаются в архиве навсегда.</p>
+    </section>
+  </div>
+  <div class="help-nav" aria-label="Листание справки">
+    <button type="button" data-help-prev aria-label="Предыдущая карточка">←</button>
+    <span class="help-dots" data-help-dots aria-live="polite"></span>
+    <button type="button" data-help-next aria-label="Следующая карточка">→</button>
+  </div>
+</dialog>{{end}}

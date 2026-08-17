@@ -296,17 +296,20 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .theme-card::before { content: "Тема"; display: block; margin-bottom: .5rem; color: #6f211d; font: 700 .62rem "Cutive Mono", "Courier New", monospace; letter-spacing: .09em; text-transform: uppercase; }
 .theme-card strong { font-size: 1.2rem; line-height: 1.25; }
 
-/* Липкий якорь «назад» */
-.back-anchor { position: sticky; top: .6rem; z-index: 5; display: inline-block; margin-bottom: 2rem; padding: .55rem .9rem; border: 1px solid #837968; color: var(--ink); background: var(--paper); text-decoration: none; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; }
+/* Фиксированный якорь «назад» — слева, всегда на виду */
+.back-anchor { position: fixed; top: .8rem; left: .8rem; z-index: 30; display: inline-block; padding: .55rem .9rem; border: 1px solid #837968; color: var(--ink); background: var(--paper); text-decoration: none; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; box-shadow: 0 .4rem 1rem #0004; }
 
 /* Автоматически сданный черновик */
 .auto-stamp { align-self: start; justify-self: start; margin: .4rem 0 0; padding: .3rem .5rem; border: 1px solid #7b3b35; color: #6d2925; font: 700 .6rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
 .bump-note { margin: .4rem 0 0; color: #665f53; font: .7rem "Cutive Mono", "Courier New", monospace; }
 
 /* Справка «?» */
-.help-trigger { position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 40; width: 2.6rem; height: 2.6rem; border: 1px solid var(--red); border-radius: 50%; color: var(--red); background: var(--paper); font: 700 1.1rem "Cutive Mono", "Courier New", monospace; cursor: pointer; box-shadow: 0 .4rem 1rem #0006; }
+/* Мини-кнопка справки «?» рядом с заголовком/личным делом */
+.help-trigger { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 1px solid var(--red); border-radius: 50%; color: var(--red); background: var(--paper); font: 700 .95rem/1 "Cutive Mono", "Courier New", monospace; cursor: pointer; }
+.help-trigger:hover { background: var(--paper-dark); }
 .help-dossier { width: min(30rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); padding: clamp(1.4rem, 4vw, 2.5rem); border: 0; color: var(--ink); background: var(--paper); box-shadow: var(--shadow); }
 .help-dossier::backdrop { background: #080908d9; backdrop-filter: blur(3px); }
+.help-dossier.open-fallback { position: fixed; inset: 0; z-index: 60; margin: auto; display: block; overflow-y: auto; }
 .help-dossier h2 { margin: .6rem 0 1.2rem; font-size: clamp(1.6rem, 5vw, 2.4rem); }
 .help-cards { min-height: 14rem; }
 .help-card { margin: 0; }
@@ -318,5 +321,5 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .help-dots { color: #665f53; font: .72rem "Cutive Mono", "Courier New", monospace; }
 
 /* Чекбокс согласия с правилами в формах */
-.dossier .rules-confirm { display: flex; align-items: center; gap: .6rem; }
-.dossier .rules-confirm input[type="checkbox"] { width: auto; }
+.dossier .rules-confirm { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
+.dossier .rules-confirm input[type="checkbox"] { width: 1.25rem; height: 1.25rem; margin: 0; padding: 0; border: 1px solid #837968; border-radius: .25rem; flex: 0 0 auto; accent-color: var(--ink); }

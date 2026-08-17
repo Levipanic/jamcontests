@@ -4,7 +4,7 @@
   <meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
   <title>Архив творческих джемов</title><link rel="stylesheet" href="/static/css/app.css">
 </head><body><main class="dossier">
-  <header class="case-heading"><p class="eyebrow">Закрытые дела</p><h1>Архив творческих джемов</h1></header>
+  <header class="case-heading"><p class="eyebrow">Закрытые дела</p><h1>Архив творческих джемов</h1>{{template "help_trigger"}}</header>
   {{if .Jams}}<section class="archive-index">{{range .Jams}}<article class="paper-card">
     <p class="eyebrow">Архивное дело № {{.PublicID}}</p><h2><a href="/jams/{{.PublicID}}">{{.Title}}</a></h2>
     {{if .Description}}<p>{{.Description}}</p>{{end}}
@@ -12,4 +12,7 @@
     <p><a href="/jams/{{.PublicID}}/products">Продукты</a> · <a href="/jams/{{.PublicID}}/nominations">Результаты номинаций</a></p>
   </article>{{end}}</section>{{else}}<p class="empty-row">В архиве пока нет завершённых джемов.</p>{{end}}
   <p><a href="/">Вернуться к текущему делу</a></p>
-</main></body></html>{{end}}
+</main>
+{{template "help_dialog"}}
+<script src="/static/js/app.js?v=2" defer></script>
+</body></html>{{end}}

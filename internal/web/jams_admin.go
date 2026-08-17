@@ -90,6 +90,7 @@ type jamAdminPageData struct {
 	QuestionnaireCompleted int
 	MoscowZone             string
 	Development            bool
+	TeamCount              int
 }
 
 // registerJamAdminRoutes installs the jam administration surface. The caller
@@ -107,6 +108,8 @@ func (a *App) registerJamAdminRoutes(router *gin.Engine) {
 	admin.POST("/jams/:id/unpublish", a.unpublishJamAdmin)
 	admin.POST("/jams/:id/override", a.overrideJamAdmin)
 	admin.POST("/jams/:id/auto", a.autoJamAdmin)
+	admin.GET("/jams/:id/delete", a.deleteJamAdminPage)
+	admin.POST("/jams/:id/delete", a.deleteJamAdmin)
 	admin.GET("/jams/:id/questionnaire", a.questionnaireAdminPage)
 	admin.POST("/jams/:id/questionnaire/questions", a.createQuestionAdmin)
 	admin.GET("/jams/:id/questionnaire/questions/:questionID/edit", a.editQuestionAdminPage)
@@ -570,6 +573,135 @@ func (a *App) setJamOverride(c *gin.Context, override *Stage) {
 		message = "Джем возвращён к автоматическому расчёту стадии."
 	}
 	adminOkRedirect(c, fmt.Sprintf("/admin/jams/%d/edit", jamID), message)
+}
+
+// jamDeleteChildStatements deletes jam child rows leaf-first so every
+// ON DELETE RESTRICT foreign key is satisfied. The final statement removes
+// the jam itself and is intentionally conditional.
+var jamDeleteChildStatements = []string{
+	`DELETE FROM questionnaire_text_answers answer USING questionnaire_responses response, questionnaires q
+	 WHERE answer.response_id=response.id AND response.questionnaire_id=q.id AND q.jam_id=$1`,
+	`DELETE FROM questionnaire_selected_options option USING questionnaire_responses response, questionnaires q
+	 WHERE option.response_id=response.id AND response.questionnaire_id=q.id AND q.jam_id=$1`,
+	`DELETE FROM questionnaire_responses response USING questionnaires q
+	 WHERE response.questionnaire_id=q.id AND q.jam_id=$1`,
+	`DELETE FROM questionnaire_questions question USING questionnaires q
+	 WHERE question.questionnaire_id=q.id AND q.jam_id=$1`,
+	`DELETE FROM questionnaires WHERE jam_id=$1`,
+	`DELETE FROM product_bumps WHERE jam_id=$1`,
+	`DELETE FROM nomination_votes WHERE jam_id=$1`,
+	`DELETE FROM nominations WHERE jam_id=$1`,
+	`DELETE FROM products WHERE jam_id=$1`,
+	`DELETE FROM team_theme_selections WHERE jam_id=$1`,
+	`DELETE FROM team_eligibility_overrides WHERE team_id IN (SELECT id FROM teams WHERE jam_id=$1)`,
+	`DELETE FROM team_invites WHERE team_id IN (SELECT id FROM teams WHERE jam_id=$1)`,
+	`DELETE FROM team_members WHERE jam_id=$1`,
+	`DELETE FROM teams WHERE jam_id=$1`,
+	`DELETE FROM jam_themes WHERE jam_id=$1`,
+	`DELETE FROM jams WHERE id=$1 AND visibility='draft'`,
+}
+
+func (a *App) deleteJamAdminPage(c *gin.Context) {
+	jamID, ok := adminID(c, "id")
+	if !ok {
+		return
+	}
+	jam, err := a.loadAdminJam(c.Request.Context(), jamID)
+	if err != nil {
+		a.handleAdminLoadError(c, "load jam for deletion", err)
+		return
+	}
+	if jam.Visibility != "draft" {
+		adminErrorRedirect(c, "/admin/jams", "Удалять можно только неопубликованный джем-черновик.")
+		return
+	}
+	var teams int
+	if err = a.pool.QueryRow(c.Request.Context(), `SELECT count(*) FROM teams WHERE jam_id=$1`, jamID).Scan(&teams); err != nil {
+		a.jamAdminFailure(c, "count jam teams before deletion", err)
+		return
+	}
+	a.renderJamAdmin(c, http.StatusOK, "admin_jam_delete.html", jamAdminPageData{Jam: jam, TeamCount: teams})
+}
+
+func (a *App) deleteJamAdmin(c *gin.Context) {
+	jamID, ok := adminID(c, "id")
+	if !ok {
+		return
+	}
+	reason, err := validateReason(c.PostForm("reason"))
+	if err != nil {
+		a.renderJamDeleteError(c, jamID, err.Error())
+		return
+	}
+	if c.PostForm("confirm_destroy") != "yes" {
+		a.renderJamDeleteError(c, jamID, "Подтвердите уничтожение джема-черновика.")
+		return
+	}
+	tx, err := a.pool.Begin(c.Request.Context())
+	if err != nil {
+		a.jamAdminFailure(c, "begin jam deletion", err)
+		return
+	}
+	defer tx.Rollback(c.Request.Context())
+	if _, err = tx.Exec(c.Request.Context(), `SELECT pg_advisory_xact_lock($1)`, jamLifecycleLock); err != nil {
+		a.jamAdminFailure(c, "lock jam lifecycle", err)
+		return
+	}
+	jam, err := loadAdminJamTx(c.Request.Context(), tx, jamID, true)
+	if err != nil {
+		a.handleAdminLoadError(c, "lock jam for deletion", err)
+		return
+	}
+	if jam.Visibility != "draft" {
+		a.renderJamDeleteError(c, jamID, "Удалять можно только неопубликованный джем-черновик.")
+		return
+	}
+	var wasPublished bool
+	if err = tx.QueryRow(c.Request.Context(), `
+		SELECT EXISTS (
+			SELECT 1 FROM admin_audit_log
+			WHERE entity_type='jam' AND entity_id=$1 AND action IN ('jam.publish', 'jam.demo_create')
+		)`, jamID).Scan(&wasPublished); err != nil {
+		a.jamAdminFailure(c, "check jam publication history", err)
+		return
+	}
+	if wasPublished {
+		a.renderJamDeleteError(c, jamID, "Джем уже публиковался — его историю удалять нельзя.")
+		return
+	}
+	var teams int
+	if err = tx.QueryRow(c.Request.Context(), `SELECT count(*) FROM teams WHERE jam_id=$1`, jamID).Scan(&teams); err != nil {
+		a.jamAdminFailure(c, "count jam teams", err)
+		return
+	}
+	if teams > 0 {
+		a.renderJamDeleteError(c, jamID, "В джеме уже есть команды — удалить его нельзя.")
+		return
+	}
+	if err = insertAdminAudit(c.Request.Context(), tx, CurrentUser(c), "jam.delete", "jam", jamID, reason, jamRecordAuditData(*jam), map[string]any{"deleted": true}); err != nil {
+		a.jamAdminFailure(c, "audit jam deletion", err)
+		return
+	}
+	for _, statement := range jamDeleteChildStatements {
+		if _, err = tx.Exec(c.Request.Context(), statement, jamID); err != nil {
+			a.jamAdminFailure(c, "delete jam subtree", err)
+			return
+		}
+	}
+	if err = tx.Commit(c.Request.Context()); err != nil {
+		a.jamAdminFailure(c, "commit jam deletion", err)
+		return
+	}
+	adminOkRedirect(c, "/admin/jams", "Джем-черновик удалён.")
+}
+
+func (a *App) renderJamDeleteError(c *gin.Context, jamID int64, message string) {
+	jam, err := a.loadAdminJam(c.Request.Context(), jamID)
+	if err != nil {
+		a.handleAdminLoadError(c, "reload jam after deletion error", err)
+		return
+	}
+	a.renderJamAdmin(c, http.StatusConflict, "admin_jam_delete.html", jamAdminPageData{PageData: PageData{Error: message}, Jam: jam})
 }
 
 func (a *App) questionnaireAdminPage(c *gin.Context) {

@@ -12,7 +12,7 @@
 <body>
   <main class="dossier">
     <p>Приглашение в джем</p>
-    <h1>{{.TeamName}}</h1>
+    <h1>{{.TeamName}}</h1>{{template "help_trigger"}}
     <p>{{.JamTitle}}</p>
     {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
     <p>Вступление подтвердит ваше участие в этой команде. В одном джеме можно состоять только в одной команде.</p>
@@ -22,6 +22,8 @@
     </form>
     <p><a href="/teams/{{.TeamPublicID}}">Посмотреть команду</a></p>
   </main>
+{{template "help_dialog"}}
+<script src="/static/js/app.js?v=2" defer></script>
 </body>
 </html>
 {{end}}

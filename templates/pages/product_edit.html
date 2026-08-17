@@ -4,7 +4,7 @@
   <meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
   <title>Продукт команды {{.TeamName}}</title><link rel="stylesheet" href="/static/css/app.css">
 </head><body><main class="dossier">
-  <article><p class="eyebrow">Карточка результата / команда «{{.TeamName}}»</p><h1>Продукт команды {{.TeamName}}</h1>
+  <article><p class="eyebrow">Карточка результата / команда «{{.TeamName}}»</p><h1>Продукт команды {{.TeamName}}</h1>{{template "help_trigger"}}
     <p>Статус: <strong>{{if eq .Product.Status "final"}}финально сдан{{else}}черновик{{end}}</strong></p>
     {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
   </article>
@@ -22,4 +22,7 @@
     <form method="post" action="/jams/{{.PublicJamID}}/product/finalize"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button type="submit">Сдать финально</button></form>
   </section>{{end}}
   <p><a href="/teams/{{.PublicTeamID}}">Вернуться к команде</a></p>
-</main></body></html>{{end}}
+</main>
+{{template "help_dialog"}}
+<script src="/static/js/app.js?v=2" defer></script>
+</body></html>{{end}}

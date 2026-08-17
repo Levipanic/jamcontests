@@ -90,3 +90,8 @@ func adminPagerBase(c *gin.Context) string {
 func adminOkRedirect(c *gin.Context, path, message string) {
 	c.Redirect(http.StatusSeeOther, path+"?ok="+url.QueryEscape(message))
 }
+
+// adminErrorRedirect redirects with an error flash message.
+func adminErrorRedirect(c *gin.Context, path, message string) {
+	c.Redirect(http.StatusSeeOther, path+"?error="+url.QueryEscape(message))
+}
