@@ -1,7 +1,7 @@
 {{define "product_detail.html"}}
 <!doctype html><html lang="ru"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
-  <title>{{.Product.Title}}</title><link rel="stylesheet" href="/static/css/app.css?v=3">
+  <title>{{.Product.Title}}</title><link rel="stylesheet" href="/static/css/app.css?v=4">
 </head><body><main class="dossier">
   <a class="back-anchor" href="/jams/{{.Product.JamPublicID}}/products">← Все продукты джема</a>
   <article><p class="eyebrow">Раскрытый продукт / № {{.Product.PublicID}}</p><h1>{{.Product.Title}}</h1>{{template "help_trigger"}}
@@ -12,7 +12,7 @@
     {{if .Product.CommentaryURL}}<p><a href="{{.Product.CommentaryURL}}" target="_blank" rel="noopener noreferrer nofollow">Комментарий или разбор</a></p>{{end}}
     {{if eq .Product.Status "draft"}}<p><span class="auto-stamp">Сдано автоматически (финальная сдача не была нажата)</span></p>{{end}}
   </section>
-  <section data-bump-product="{{.Product.PublicID}}"><h2>Лайки</h2><p><strong data-bump-count>{{.Product.BumpCount}}</strong></p>{{if and .User .BumpsMutable}}<button type="button" data-bump-action>Лайк</button>{{else if .BumpsMutable}}<a href="/login?next=/products/{{.Product.PublicID}}">Войдите, чтобы поставить лайк</a>{{end}}<p role="status" data-bump-status></p></section>
+  <section data-bump-product="{{.Product.PublicID}}"><h2>Лайки</h2><div class="bump-row"><p class="bump-counter"><span aria-hidden="true">❤️</span><strong data-bump-count>{{.Product.BumpCount}}</strong></p>{{if and .User .BumpsMutable}}<button type="button" data-bump-action>Лайк</button>{{else if .BumpsMutable}}<a class="bump-login" href="/login?next=/products/{{.Product.PublicID}}">Войдите, чтобы поставить лайк</a>{{end}}</div><p role="status" data-bump-status></p></section>
   <p><a href="/jams/{{.Product.JamPublicID}}/products">Все продукты джема</a></p>
 </main>{{if .BumpsMutable}}<script src="/static/js/bumps.js" defer></script>{{end}}
 {{template "help_dialog"}}

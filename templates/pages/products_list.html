@@ -1,7 +1,7 @@
 {{define "products_list.html"}}
 <!doctype html><html lang="ru"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
-  <title>Продукты: {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css?v=3">
+  <title>Продукты: {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css?v=4">
 </head><body><main class="dossier">
   <a class="back-anchor" href="/jams/{{.PublicJamID}}">← Вернуться к джему</a>
   <article><p class="eyebrow">Раскрытые материалы / джем № {{.PublicJamID}}</p><h1>Продукты</h1>{{template "help_trigger"}}<p>{{.JamTitle}}</p></article>
@@ -9,7 +9,7 @@
     <p class="eyebrow">Продукт № {{.PublicID}} / {{.TeamName}}</p><h2><a href="/products/{{.PublicID}}">{{.Title}}</a></h2>
     {{if eq .Status "draft"}}<span class="auto-stamp">Сдано автоматически</span>{{end}}
     <p>Тема: <strong>{{.Theme}}</strong></p>{{if .Description}}<p class="product-copy">{{.Description}}</p>{{end}}
-    <div data-bump-product="{{.PublicID}}"><p>Лайки: <strong data-bump-count>{{.BumpCount}}</strong></p>{{if and $.User $.BumpsMutable}}<button type="button" data-bump-action>Лайк</button>{{else if $.BumpsMutable}}<a href="/login?next=/jams/{{$.PublicJamID}}/products">Войдите, чтобы поставить лайк</a>{{end}}<p role="status" data-bump-status></p></div>
+    <div data-bump-product="{{.PublicID}}"><div class="bump-row"><p class="bump-counter"><span aria-hidden="true">❤️</span><strong data-bump-count>{{.BumpCount}}</strong></p>{{if and $.User $.BumpsMutable}}<button type="button" data-bump-action>Лайк</button>{{else if $.BumpsMutable}}<a class="bump-login" href="/login?next=/jams/{{$.PublicJamID}}/products">Войдите, чтобы поставить лайк</a>{{end}}</div><p role="status" data-bump-status></p></div>
   </article>{{end}}</div>{{else}}<p>Финально сданных продуктов нет.</p>{{end}}</section>
   <p><a href="/jams/{{.PublicJamID}}">Вернуться к джему</a></p>
 </main>{{if .BumpsMutable}}<script src="/static/js/bumps.js" defer></script>{{end}}

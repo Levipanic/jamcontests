@@ -245,8 +245,8 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .dossier label { display: grid; gap: .35rem; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
 .dossier input, .dossier textarea, .dossier select { width: 100%; padding: .7rem; border: 1px solid #837968; color: var(--ink); background: var(--paper-light); }
 .dossier button { justify-self: start; padding: .72rem 1rem; border: 0; color: var(--paper-light); background: var(--ink); cursor: pointer; }
-.dossier button[data-bump-action] { padding: .45rem .85rem; border: .14rem double #b14a42; color: var(--red); background: transparent; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; transition: background .15s ease, color .15s ease; }
-.dossier button[data-bump-action]:hover:not(:disabled) { background: var(--red); color: #fff8eb; }
+.dossier button[data-bump-action] { padding: .45rem .85rem; border: .14rem double #b14a42; color: var(--red); background: transparent; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; transform: rotate(-2.5deg); transition: transform .15s ease, background .15s ease, color .15s ease; }
+.dossier button[data-bump-action]:hover:not(:disabled) { background: var(--red); color: #fff8eb; transform: rotate(0deg); }
 .dossier button[data-bump-action]:disabled { opacity: .55; cursor: default; }
 .dossier img { max-width: 100%; object-fit: cover; filter: grayscale(.5); }
 .dossier li { margin: .8rem 0; }
@@ -317,6 +317,10 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 /* Автоматически сданный черновик */
 .auto-stamp { align-self: start; justify-self: start; margin: .4rem 0 0; padding: .3rem .5rem; border: 1px solid #7b3b35; color: #6d2925; font: 700 .6rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
 .bump-note { margin: .4rem 0 0; color: #665f53; font: .7rem "Cutive Mono", "Courier New", monospace; }
+.bump-row { display: flex; align-items: center; flex-wrap: wrap; gap: .9rem; margin-top: .5rem; }
+.bump-counter { display: inline-flex; align-items: baseline; gap: .35rem; margin: 0; color: var(--red); font: 700 1.05rem "Cutive Mono", "Courier New", monospace; }
+.bump-counter strong { font-size: 1.3rem; color: var(--ink); }
+.bump-login { font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; text-decoration-thickness: .1rem; }
 
 /* Справка «?» */
 /* Мини-кнопка справки «?» рядом с заголовком/личным делом */
