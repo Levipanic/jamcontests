@@ -291,10 +291,22 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .stage-action .section-note { margin: 0; }
 
 /* Темы-карточки */
-.theme-cards { display: flex; flex-wrap: wrap; gap: 1rem; max-width: 64rem; margin-top: 1rem; }
-.theme-card { position: relative; flex: 0 1 min(22rem, 100%); padding: 1.1rem 1.3rem 1.3rem; border: 1px solid #a49782; background: linear-gradient(145deg, #daceb7, #bcae94); box-shadow: .5rem .6rem 1.2rem #0005; }
-.theme-card::before { content: "Тема"; display: block; margin-bottom: .5rem; color: #6f211d; font: 700 .62rem "Cutive Mono", "Courier New", monospace; letter-spacing: .09em; text-transform: uppercase; }
-.theme-card strong { font-size: 1.2rem; line-height: 1.25; }
+.theme-cards { counter-reset: theme-index; display: flex; flex-wrap: wrap; gap: 1rem; max-width: 64rem; margin-top: 1rem; }
+.theme-card { counter-increment: theme-index; position: relative; flex: 0 1 min(22rem, 100%); padding: 1.1rem 1.3rem 1.5rem; border: 1px solid #a49782; background: linear-gradient(145deg, #daceb7, #bcae94); box-shadow: .5rem .6rem 1.2rem #0005; transition: transform .15s ease, box-shadow .15s ease; }
+.theme-card::before { content: "ТЕМА " counter(theme-index, decimal-leading-zero); display: block; margin-bottom: .6rem; color: #6f211d; font: 700 .62rem "Cutive Mono", "Courier New", monospace; letter-spacing: .09em; }
+.theme-card .theme-phrase { display: inline-block; font-size: 1.2rem; line-height: 1.25; }
+.theme-choice-form .theme-card { cursor: pointer; }
+.theme-choice-form .theme-card input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.theme-choice-form .theme-card:hover { transform: translateY(-.2rem) rotate(-.5deg); box-shadow: .7rem .85rem 1.5rem #0006; }
+.theme-card.chosen, .theme-choice-form .theme-card:has(input:checked) { border-color: #7b3b35; background: linear-gradient(145deg, #e7ddc7, #cbbc9d); box-shadow: inset .35rem 0 0 #9c322a, .5rem .6rem 1.2rem #0005; }
+.theme-stamp { position: absolute; right: .7rem; bottom: .7rem; padding: .32rem .55rem; border: .14rem double #7b3b35; color: #7b3b35; background: #e9dfc9f0; font: 700 .6rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .08em; transform: rotate(-4deg); white-space: nowrap; }
+.theme-confirm { display: flex; align-items: center; justify-content: space-between; gap: 1rem; max-width: 64rem; margin-top: 1.2rem; }
+.theme-hint { margin: 0; color: #665f53; font: .72rem "Cutive Mono", "Courier New", monospace; }
+.theme-seal { display: none; padding: .8rem 1.2rem; border: .18rem double #7b3b35; color: #7b3b35; background: transparent; box-shadow: .35rem .4rem .9rem #0004; font: 700 .78rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .12em; cursor: pointer; transform: rotate(-2deg); transition: transform .15s ease, background .15s ease; }
+.theme-choice-form:has(input[name="theme_id"]:checked) .theme-hint { display: none; }
+.theme-choice-form:has(input[name="theme_id"]:checked) .theme-seal { display: inline-block; }
+.theme-seal:hover { background: #f1e5dc; transform: rotate(0deg); }
+.theme-ok { max-width: 64rem; margin: .8rem 0 0; padding: .5rem .8rem; border: 1px solid #3c6b45; color: #2f5d3a; background: #e6efdf8c; font: .72rem "Cutive Mono", "Courier New", monospace; }
 
 /* Фиксированный якорь «назад» — слева, всегда на виду */
 .back-anchor { position: fixed; top: .8rem; left: .8rem; z-index: 30; display: inline-block; padding: .55rem .9rem; border: 1px solid #837968; color: var(--ink); background: var(--paper); text-decoration: none; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; box-shadow: 0 .4rem 1rem #0004; }

@@ -394,7 +394,7 @@ func (a *App) render(c *gin.Context, status int, name string, data PageData) {
 }
 
 func (a *App) home(c *gin.Context) {
-	data := PageData{AuthOpen: c.Query("auth") != "", AuthMode: c.DefaultQuery("auth", "login"), Next: safeNext(c.Query("next")), ProfileError: c.Query("profile_error"), AutoOpenAuth: true}
+	data := PageData{AuthOpen: c.Query("auth") != "", AuthMode: c.DefaultQuery("auth", "login"), Next: safeNext(c.Query("next")), ProfileError: c.Query("profile_error"), Ok: c.Query("ok"), AutoOpenAuth: true}
 	if err := a.populateHome(c, &data); err != nil {
 		a.logger.Error("load active jam", "error", err)
 		data.Error = "Не удалось загрузить данные. Попробуйте позже."

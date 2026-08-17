@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -454,7 +455,8 @@ func (a *App) teamThemeSelect(c *gin.Context) {
 		return
 	}
 	var lockedThemeID int64
-	if err = tx.QueryRow(ctx, `SELECT id FROM jam_themes WHERE id=$1 AND jam_id=$2 AND withdrawn_at IS NULL FOR SHARE`, themeID, team.JamID).Scan(&lockedThemeID); err != nil {
+	var lockedPhrase string
+	if err = tx.QueryRow(ctx, `SELECT id, phrase FROM jam_themes WHERE id=$1 AND jam_id=$2 AND withdrawn_at IS NULL FOR SHARE`, themeID, team.JamID).Scan(&lockedThemeID, &lockedPhrase); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			themeSelectionRedirectError(c, publicTeamID, "Выбранная тема недоступна.")
 			return
@@ -475,7 +477,7 @@ func (a *App) teamThemeSelect(c *gin.Context) {
 		a.themeSelectionFailure(c, publicTeamID, err)
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/#jam")
+	c.Redirect(http.StatusSeeOther, "/?ok="+url.QueryEscape("Тема команды отмечена печатью: «"+lockedPhrase+"»")+"#jam")
 }
 
 func (a *App) renderAdminThemes(c *gin.Context, jamID int64, message string, status int) {

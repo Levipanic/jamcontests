@@ -98,12 +98,26 @@
         <section aria-labelledby="themes-title">
           <p class="eyebrow">Материалы дела</p><h2 id="themes-title">Темы</h2>
           {{if .ThemeConfigError}}<p class="alert" role="alert">Критическая ошибка конфигурации: для текущей стадии нет активных тем. Выбор темы и финальная сдача заблокированы.</p>{{end}}
-          {{if .Themes}}<div class="theme-cards">{{range .Themes}}<article class="theme-card"><strong>{{.Phrase}}</strong></article>{{end}}</div>{{end}}
-          {{if and .SelectedTheme .Profile}}<p>Тема вашей команды: <strong>{{.SelectedTheme.Phrase}}</strong></p>{{end}}
-          {{if and (eq .Jam.Stage "submission") .Profile .Profile.IsCaptain}}
-            {{if .Profile.Eligible}}
-              {{if .Themes}}<form method="post" action="/teams/{{.Profile.TeamPublicID}}/theme" class="paper-form"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>Тема команды<select name="theme_id" required><option value="">Выберите тему</option>{{range .Themes}}<option value="{{.ID}}" {{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}}selected{{end}}>{{.Phrase}}</option>{{end}}</select></label><button type="submit">{{if .SelectedTheme}}Изменить тему{{else}}Выбрать тему{{end}}</button></form>{{end}}
-            {{else}}<p class="section-note">Выбор темы станет доступен после получения командой допуска.</p>{{end}}
+          {{if .Ok}}<p class="theme-ok" role="status">{{.Ok}}</p>{{end}}
+          {{if .Themes}}
+            {{$choosing := and (eq .Jam.Stage "submission") .Profile .Profile.TeamPublicID .Profile.IsCaptain .Profile.Eligible}}
+            {{if $choosing}}
+            <form method="post" action="/teams/{{.Profile.TeamPublicID}}/theme" class="theme-choice-form">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <div class="theme-cards">
+                {{range .Themes}}<label class="theme-card{{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}} chosen{{end}}"><input type="radio" name="theme_id" value="{{.ID}}"{{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}} checked{{end}}><span class="theme-phrase">{{.Phrase}}</span>{{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}}<span class="theme-stamp">Отмечено печатью</span>{{end}}</label>{{end}}
+              </div>
+              <div class="theme-confirm">
+                <p class="theme-hint">Отметьте тему на карточке, затем приложите печать подтверждения.</p>
+                <button type="submit" class="theme-seal">{{if .SelectedTheme}}Изменить тему — приложить печать{{else}}Приложить печать: подтвердить выбор{{end}}</button>
+              </div>
+            </form>
+            {{else}}
+            <div class="theme-cards">
+              {{range .Themes}}<article class="theme-card{{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}} chosen{{end}}"><span class="theme-phrase">{{.Phrase}}</span>{{if and $.SelectedTheme (eq $.SelectedTheme.ID .ID)}}<span class="theme-stamp">Выбрано вашей командой</span>{{end}}</article>{{end}}
+            </div>
+            {{if and (eq .Jam.Stage "submission") .Profile .Profile.IsCaptain}}<p class="section-note">Выбор темы станет доступен после получения командой допуска.</p>{{end}}
+            {{end}}
           {{end}}
         </section>
         {{end}}
