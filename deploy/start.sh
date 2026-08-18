@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Quick start/restart of the production Jam Contests service.
+# Quick start/stop/status of the production Jam Contests service.
 #
 # Installed by deploy/quicksetup.sh:
 #   sudo ./deploy/start.sh           start or restart the whole application
+#   sudo ./deploy/start.sh --stop    stop the application and the backup timer
 #   sudo ./deploy/start.sh --status  show unit status without starting anything
 #
-# The script starts the application and the backup timer, then waits until
-# GET /health answers 200 (the app serves 503 while PostgreSQL or the schema
-# is unavailable).
+# The start mode waits until GET /health answers 200 (the app serves 503 while
+# PostgreSQL or the schema is unavailable).
 
 set -euo pipefail
 
@@ -17,7 +17,10 @@ log() { printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >&2; }
 fail() { log "ERROR: $*"; exit 1; }
 
 MODE=start
-[[ "${1:-}" == "--status" ]] && MODE=status
+case "${1:-}" in
+    --status) MODE=status ;;
+    --stop) MODE=stop ;;
+esac
 
 [[ "$(id -u)" -eq 0 ]] || fail "запустите от root: sudo ./deploy/start.sh"
 
@@ -27,6 +30,14 @@ fi
 
 if [[ "$MODE" == "status" ]]; then
     systemctl status --no-pager jamcontests.service jamcontests-backup.timer || true
+    exit 0
+fi
+
+if [[ "$MODE" == "stop" ]]; then
+    log "остановка приложения и таймера бэкапов"
+    systemctl stop jamcontests.service
+    systemctl stop jamcontests-backup.timer 2>/dev/null || log "WARNING: таймер бэкапов не удалось остановить"
+    log "остановлено: app=$(systemctl is-active jamcontests.service), timer=$(systemctl is-active jamcontests-backup.timer)"
     exit 0
 fi
 
