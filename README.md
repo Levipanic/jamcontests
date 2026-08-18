@@ -118,7 +118,7 @@ sudo ./deploy/quicksetup.sh --force  # полная переустановка (
 
 ```bash
 sudo ./deploy/start.sh           # запуск/рестарт
-sudo ./deploy/start.sh --status  # только статус юнитов
+sudo ./deploy/start.sh --stop    # стоп
 ```
 
 ## Производственный запуск
