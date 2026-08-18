@@ -144,8 +144,17 @@ if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='
     runuser -u postgres -- createdb jamcontests
 fi
 if [[ "$(runuser -u postgres -- psql -tAc "SELECT count(*) FROM pg_roles WHERE rolname IN ('jamcontests_migrator','jamcontests_runtime','jamcontests_backup')")" != "3" ]]; then
-    runuser -u postgres -- psql -v ON_ERROR_STOP=1 -f - < "$SCRIPT_DIR/sql/production_roles.sql"
+    # -d jamcontests is required: the SCHEMA public grants in the role file must
+    # land in the application database, and psql defaults to the postgres db.
+    runuser -u postgres -- psql -d jamcontests -v ON_ERROR_STOP=1 -f - < "$SCRIPT_DIR/sql/production_roles.sql"
 fi
+# Grants are re-applied on every run (idempotent) so a previously half-configured
+# cluster is repaired; role creation itself stays guarded above.
+runuser -u postgres -- psql -d jamcontests -v ON_ERROR_STOP=1 \
+    -c "GRANT CONNECT ON DATABASE jamcontests TO jamcontests_runtime, jamcontests_backup" \
+    -c "GRANT ALL PRIVILEGES ON DATABASE jamcontests TO jamcontests_migrator" \
+    -c "GRANT CREATE ON SCHEMA public TO jamcontests_migrator" \
+    -c "GRANT USAGE ON SCHEMA public TO jamcontests_runtime, jamcontests_backup"
 RUNTIME_PASS="$(openssl rand -hex 24)"
 MIGRATOR_PASS="$(openssl rand -hex 24)"
 BACKUP_PASS="$(openssl rand -hex 24)"
