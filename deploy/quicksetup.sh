@@ -131,7 +131,7 @@ if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='
     runuser -u postgres -- createdb jamcontests
 fi
 if [[ "$(runuser -u postgres -- psql -tAc "SELECT count(*) FROM pg_roles WHERE rolname IN ('jamcontests_migrator','jamcontests_runtime','jamcontests_backup')")" != "3" ]]; then
-    runuser -u postgres -- psql -v ON_ERROR_STOP=1 -f "$SCRIPT_DIR/sql/production_roles.sql"
+    runuser -u postgres -- psql -v ON_ERROR_STOP=1 -f - < "$SCRIPT_DIR/sql/production_roles.sql"
 fi
 RUNTIME_PASS="$(openssl rand -hex 24)"
 MIGRATOR_PASS="$(openssl rand -hex 24)"
