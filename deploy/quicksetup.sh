@@ -216,11 +216,14 @@ if [[ -t 0 ]]; then
     if [[ -z "$ADMIN_PASSWORD" || "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]]; then
         fail "пароли не совпадают или пусты"
     fi
+    set -a
+    . /etc/jamcontests/jamcontests.env
+    set +a
     (cd /opt/jamcontests && ADMIN_PASSWORD="$ADMIN_PASSWORD" ./bin/jamcontests create-admin \
         --username "$ADMIN_USERNAME" ${ADMIN_EMAIL:+--email "$ADMIN_EMAIL"})
 else
     log "неинтерактивный запуск: создание администратора пропущено; выполните"
-    log "  (cd /opt/jamcontests && ADMIN_PASSWORD=... ./bin/jamcontests create-admin --username admin)"
+    log "  set -a; . /etc/jamcontests/jamcontests.env; set +a; cd /opt/jamcontests && ADMIN_PASSWORD=... ./bin/jamcontests create-admin --username admin"
 fi
 
 log "шаг 9/9: systemd-юниты"
