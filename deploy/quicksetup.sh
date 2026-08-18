@@ -81,12 +81,18 @@ for _ in $(seq 1 30); do
 done
 pg_isready -q || fail "PostgreSQL не поднялся"
 
-CONFLICT="$(ss -tlnH 'sport = :5432' 2>/dev/null | grep -v 'postgres\|postmaster' || true)"
-if [[ -n "$CONFLICT" ]]; then
-    log "порт 5432 занят не этим PostgreSQL-кластером:"
-    printf '%s\n' "$CONFLICT" >&2
-    fail "остановите конфликтующий процесс (например docker stop jamcontests-postgres-1), выполните sudo systemctl restart postgresql и запустите скрипт заново"
+PGPORT="$(runuser -u postgres -- psql -tAc 'SHOW port' | tr -d '[:space:]')"
+[[ -n "$PGPORT" && "$PGPORT" =~ ^[0-9]+$ ]] || fail "не удалось определить порт PostgreSQL"
+if ! pg_isready -h 127.0.0.1 -p "$PGPORT" -q; then
+    fail "кластер PostgreSQL не слушает TCP на 127.0.0.1:$PGPORT (только unix-socket); включите listen_addresses в postgresql.conf и запустите скрипт заново"
 fi
+CONFLICT="$(ss -tlnH "sport = :${PGPORT}" 2>/dev/null | grep -v 'postgres\|postmaster' || true)"
+if [[ -n "$CONFLICT" ]]; then
+    log "порт $PGPORT занят не этим PostgreSQL-кластером:"
+    printf '%s\n' "$CONFLICT" >&2
+    fail "остановите конфликтующий процесс (например docker stop jamcontests-postgres-1) и запустите скрипт заново"
+fi
+log "PostgreSQL слушает 127.0.0.1:$PGPORT"
 
 log "шаг 2/9: Go 1.24+"
 install_go() {
@@ -164,7 +170,7 @@ cat >/etc/jamcontests/jamcontests.env <<EOF
 APP_ENV=production
 HTTP_ADDR=127.0.0.1:8080
 LOG_LEVEL=info
-DATABASE_URL=postgres://jamcontests_runtime:${RUNTIME_PASS}@127.0.0.1:5432/jamcontests?sslmode=prefer
+DATABASE_URL=postgres://jamcontests_runtime:${RUNTIME_PASS}@127.0.0.1:${PGPORT}/jamcontests?sslmode=prefer
 CSRF_SECRET=$(openssl rand -base64 48)
 SESSION_COOKIE=jamcontests_session
 SESSION_TTL=720h
@@ -175,7 +181,7 @@ AVATAR_DIR=/opt/jamcontests/storage/avatars
 MAX_AVATAR_BYTES=2097152
 EOF
 cat >/etc/jamcontests/backup.env <<EOF
-DATABASE_URL=postgres://jamcontests_backup:${BACKUP_PASS}@127.0.0.1:5432/jamcontests?sslmode=prefer
+DATABASE_URL=postgres://jamcontests_backup:${BACKUP_PASS}@127.0.0.1:${PGPORT}/jamcontests?sslmode=prefer
 AVATAR_DIR=/opt/jamcontests/storage/avatars
 BACKUP_DIR=/var/backups/jamcontests
 BACKUP_KEEP=30
@@ -186,7 +192,7 @@ chmod 0600 /etc/jamcontests/jamcontests.env /etc/jamcontests/backup.env
 umask 022
 
 log "шаг 7/9: миграции (роль-владелец схемы)"
-(cd /opt/jamcontests && MIGRATION_DATABASE_URL="postgres://jamcontests_migrator:${MIGRATOR_PASS}@127.0.0.1:5432/jamcontests?sslmode=prefer" ./bin/jamcontests migrate)
+(cd /opt/jamcontests && MIGRATION_DATABASE_URL="postgres://jamcontests_migrator:${MIGRATOR_PASS}@127.0.0.1:${PGPORT}/jamcontests?sslmode=prefer" ./bin/jamcontests migrate)
 unset MIGRATOR_PASS
 
 log "шаг 8/9: первый администратор"
