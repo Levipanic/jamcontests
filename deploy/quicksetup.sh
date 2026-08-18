@@ -81,6 +81,13 @@ for _ in $(seq 1 30); do
 done
 pg_isready -q || fail "PostgreSQL не поднялся"
 
+CONFLICT="$(ss -tlnH 'sport = :5432' 2>/dev/null | grep -v 'postgres\|postmaster' || true)"
+if [[ -n "$CONFLICT" ]]; then
+    log "порт 5432 занят не этим PostgreSQL-кластером:"
+    printf '%s\n' "$CONFLICT" >&2
+    fail "остановите конфликтующий процесс (например docker stop jamcontests-postgres-1), выполните sudo systemctl restart postgresql и запустите скрипт заново"
+fi
+
 log "шаг 2/9: Go 1.24+"
 install_go() {
     local go_arch latest
