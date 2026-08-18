@@ -98,6 +98,28 @@ export TEST_DATABASE_URL='postgres://jamcontests:jamcontests@localhost:5432/jamc
 go test ./... -race -count=1
 ```
 
+## Быстрое развёртывание на VPS
+
+`deploy/quicksetup.sh` разворачивает приложение на свежем Debian/Ubuntu-сервере
+(запуск от root из корня репозитория): ставит PostgreSQL и Go 1.24+, собирает
+бинарник, создаёт пользователя `jamcontests`, роли БД со случайными паролями
+(см. `docs/production.md`) и `/etc/jamcontests/jamcontests.env` (root, 0600),
+применяет миграции, интерактивно заводит первого администратора, ставит
+systemd-юниты (приложение + таймер бэкапов) и опционально Caddy с доменом.
+
+```bash
+sudo ./deploy/quicksetup.sh          # первая установка
+sudo ./deploy/quicksetup.sh --force  # полная переустановка (аватары сохраняются)
+```
+
+`deploy/start.sh` быстро запускает/перезапускает всё приложение и ждёт,
+пока `/health` не ответит `200`:
+
+```bash
+sudo ./deploy/start.sh           # запуск/рестарт
+sudo ./deploy/start.sh --status  # только статус юнитов
+```
+
 ## Производственный запуск
 
 - Аватары команд хранятся в `storage/avatars/` на локальном диске; при загрузке они
@@ -125,7 +147,7 @@ templates/         серверные шаблоны (pages/, admin/)
 static/            CSS и JS
 storage/avatars/   загруженные аватары
 docs/              production, backup, acceptance
-deploy/            шаблоны ролей SQL и systemd-юниты
+deploy/            quicksetup.sh, start.sh, шаблоны ролей SQL и systemd-юниты
 ```
 
 ## Документация
