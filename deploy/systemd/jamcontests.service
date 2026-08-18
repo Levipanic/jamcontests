@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=jamcontests
-Group=jamcontests
+User=www-data
+Group=www-data
 WorkingDirectory=/opt/jamcontests
 EnvironmentFile=/etc/jamcontests/jamcontests.env
 ExecStart=/opt/jamcontests/bin/jamcontests serve

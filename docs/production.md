@@ -35,17 +35,17 @@ can never silently become writable for the application.
 ## 2. Directory layout and systemd
 
 ```text
-/opt/jamcontests/bin/jamcontests            the compiled binary (root:jamcontests 0750)
+/opt/jamcontests/bin/jamcontests            the compiled binary (root:www-data 0750)
 /opt/jamcontests/migrations/                migration files, read-only
 /opt/jamcontests/templates/ static/         read-only assets
-/opt/jamcontests/storage/avatars/           avatar uploads (owned by jamcontests, 0750)
+/opt/jamcontests/storage/avatars/           avatar uploads (owned by www-data, 0750)
 /etc/jamcontests/jamcontests.env            environment file (root, mode 0600)
 ```
 
 Deploy the unit from `deploy/systemd/jamcontests.service`:
 
 ```bash
-install -d -o jamcontests -g jamcontests /opt/jamcontests/storage/avatars
+install -d -o www-data -g www-data /opt/jamcontests/storage/avatars
 cp deploy/env.production.example /etc/jamcontests/jamcontests.env
 chmod 0600 /etc/jamcontests/jamcontests.env
 # edit the secrets and the database URLs, then:

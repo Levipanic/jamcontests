@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # One-shot production setup for a fresh Debian/Ubuntu VPS.
 #
-# Installs PostgreSQL and Go 1.24+, builds the Jam Contests binary, creates the
-# jamcontests system user, the three PostgreSQL roles from
+# Installs PostgreSQL and Go 1.24+, builds the Jam Contests binary, runs the
+# service as the www-data system user, creates the three PostgreSQL roles from
 # deploy/sql/production_roles.sql (with random passwords), writes
 # /etc/jamcontests/jamcontests.env (root, 0600), applies migrations, creates
 # the first administrator interactively, installs the systemd units (app plus
@@ -111,13 +111,15 @@ else
     install_go
 fi
 
-log "шаг 3/9: системный пользователь jamcontests и раскладка каталогов"
-id -u jamcontests >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin jamcontests
+log "шаг 3/9: системный пользователь www-data и раскладка каталогов"
+if ! id -u www-data >/dev/null 2>&1; then
+    useradd --system --shell /usr/sbin/nologin www-data
+fi
 if [[ "$FORCE" == 1 ]]; then
     rm -rf /opt/jamcontests/bin /opt/jamcontests/migrations /opt/jamcontests/templates /opt/jamcontests/static /opt/jamcontests/scripts
 fi
 mkdir -p /opt/jamcontests/{bin,migrations,templates,static,storage/avatars,scripts}
-install -d -o jamcontests -g jamcontests -m 0750 /opt/jamcontests/storage/avatars
+install -d -o www-data -g www-data -m 0750 /opt/jamcontests/storage/avatars
 
 log "шаг 4/9: сборка бинарника"
 BUILD_DIR="$(mktemp -d)"
@@ -140,13 +142,13 @@ runuser -u postgres -- psql -v ON_ERROR_STOP=1 \
     -c "ALTER ROLE jamcontests_backup PASSWORD '$BACKUP_PASS'"
 
 log "шаг 6/9: установка файлов и окружения"
-install -m 0750 -o root -g jamcontests "$BUILD_DIR/jamcontests" /opt/jamcontests/bin/jamcontests
+install -m 0750 -o root -g www-data "$BUILD_DIR/jamcontests" /opt/jamcontests/bin/jamcontests
 cp -a "$REPO_ROOT/migrations/." /opt/jamcontests/migrations/
 cp -a "$REPO_ROOT/templates/." /opt/jamcontests/templates/
 cp -a "$REPO_ROOT/static/." /opt/jamcontests/static/
-install -m 0750 -o root -g jamcontests \
+install -m 0750 -o root -g www-data \
     "$REPO_ROOT/scripts/backup.sh" "$REPO_ROOT/scripts/verify-backup.sh" /opt/jamcontests/scripts/
-chown -R root:jamcontests /opt/jamcontests/bin /opt/jamcontests/migrations /opt/jamcontests/templates /opt/jamcontests/static
+chown -R root:www-data /opt/jamcontests/bin /opt/jamcontests/migrations /opt/jamcontests/templates /opt/jamcontests/static
 chmod -R 0750 /opt/jamcontests/bin /opt/jamcontests/migrations /opt/jamcontests/templates /opt/jamcontests/static
 
 install -d -o root -g root -m 0700 /etc/jamcontests
