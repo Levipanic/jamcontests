@@ -86,7 +86,7 @@ PGPORT="$(runuser -u postgres -- psql -tAc 'SHOW port' | tr -d '[:space:]')"
 if ! pg_isready -h 127.0.0.1 -p "$PGPORT" -q; then
     fail "кластер PostgreSQL не слушает TCP на 127.0.0.1:$PGPORT (только unix-socket); включите listen_addresses в postgresql.conf и запустите скрипт заново"
 fi
-CONFLICT="$(ss -tlnH "sport = :${PGPORT}" 2>/dev/null | grep -v 'postgres\|postmaster' || true)"
+CONFLICT="$(ss -tlnpH "sport = :${PGPORT}" 2>/dev/null | grep -v 'postgres\|postmaster' || true)"
 if [[ -n "$CONFLICT" ]]; then
     log "порт $PGPORT занят не этим PostgreSQL-кластером:"
     printf '%s\n' "$CONFLICT" >&2
