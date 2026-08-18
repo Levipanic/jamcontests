@@ -7,7 +7,7 @@
   <meta name="csrf-token" content="{{.CSRFToken}}">
   <meta name="referrer" content="no-referrer">
   <title>{{.Team.Name}}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=5">
+  <link rel="stylesheet" href="/static/css/app.css?v=9">
 </head>
 <body>
   <main class="dossier">
@@ -19,7 +19,7 @@
       </header>
       {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
       {{if .Team.AvatarPath}}<img src="/avatars/{{.Team.AvatarPath}}" alt="Аватар команды {{.Team.Name}}" width="240" height="240">{{end}}
-      {{if .Team.Description}}<p>{{.Team.Description}}</p>{{end}}
+      {{if .Team.Description}}<p class="team-description">{{.Team.Description}}</p>{{end}}
       <dl>
         <dt>Капитан</dt><dd>{{.Team.CaptainName}}</dd>
         <dt>Участников</dt><dd>{{.Team.MemberCount}}</dd>

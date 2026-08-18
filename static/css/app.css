@@ -1,4 +1,4 @@
-@import url("/static/css/font.css");
+@import url("/static/css/font.css?v=2");
 
 :root {
   --ink: #201e1a;
@@ -12,7 +12,7 @@
   --line: #938978;
   --shadow: 0 1.4rem 4rem #0009;
   color-scheme: dark;
-  font-family: "Cutive Mono", "Courier New", monospace;
+  font-family: "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   background: var(--night);
   color: var(--paper-light);
   scroll-behavior: smooth;
@@ -46,7 +46,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: flex;
   gap: 1.4rem;
   align-items: center;
-  font: 700 .72rem/1.2 "Cutive Mono", "Courier New", monospace;
+  font: 700 .72rem/1.2 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   letter-spacing: .12em;
   text-transform: uppercase;
 }
@@ -70,7 +70,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   background: #151614e8;
   color: #d9d1c2;
   text-decoration: none;
-  font: 700 .68rem/1 "Cutive Mono", "Courier New", monospace;
+  font: 700 .68rem/1 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   text-transform: uppercase;
   letter-spacing: .07em;
 }
@@ -87,11 +87,12 @@ main { overflow: hidden; }
 .eyebrow {
   margin: 0 0 .65rem;
   color: var(--red);
-  font: 700 .72rem/1.3 "Cutive Mono", "Courier New", monospace;
+  font: 700 .72rem/1.3 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   letter-spacing: .13em;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
-h1, h2 { margin: 0; font-weight: 500; letter-spacing: -.035em; }
+h1, h2 { margin: 0; font-weight: 500; letter-spacing: -.035em; overflow-wrap: anywhere; }
 h1 { max-width: 17ch; font-size: clamp(3rem, 8vw, 7.4rem); line-height: .88; }
 h2 { font-size: clamp(2.4rem, 5vw, 5rem); }
 .lede { max-width: 52rem; margin: 2rem 0; color: #c9c1b2; font-size: clamp(1rem, 2vw, 1.35rem); line-height: 1.65; }
@@ -108,7 +109,7 @@ h2 { font-size: clamp(2.4rem, 5vw, 5rem); }
   position: relative;
   padding: 1rem .5rem 0 0;
   color: #676359;
-  font: 700 clamp(.58rem, 1.2vw, .76rem)/1.2 "Cutive Mono", "Courier New", monospace;
+  font: 700 clamp(.58rem, 1.2vw, .76rem)/1.2 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   letter-spacing: .06em;
   text-transform: uppercase;
 }
@@ -131,20 +132,20 @@ h2 { font-size: clamp(2.4rem, 5vw, 5rem); }
   background: linear-gradient(120deg, #20211e, #171816);
   box-shadow: 0 1rem 3rem #0005;
 }
-.timer { margin: 0; font: 700 clamp(1.8rem, 5vw, 4rem)/1 "Cutive Mono", "Courier New", monospace; letter-spacing: -.05em; }
-.timer i { margin-right: .35em; color: #787267; font: normal .32em "Cutive Mono", "Courier New", monospace; letter-spacing: 0; }
+.timer { margin: 0; font: 700 clamp(1.8rem, 5vw, 4rem)/1 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; letter-spacing: -.05em; }
+.timer i { margin-right: .35em; color: #787267; font: normal .32em "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; letter-spacing: 0; }
 .stage-stamp, .closed-stamp, .eligibility {
   border: .18rem double var(--red);
   color: #b84940;
   padding: .55rem .75rem;
   transform: rotate(-3deg);
-  font: 700 .72rem/1 "Cutive Mono", "Courier New", monospace;
+  font: 700 .72rem/1 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   letter-spacing: .11em;
   text-transform: uppercase;
 }
 .rules-paper { max-width: 64rem; margin-top: 1.2rem; padding: 1rem 1.2rem; color: var(--ink); background: #d8cebb; }
-.rules-paper summary { cursor: pointer; font: 700 .8rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
-.rules-paper p { white-space: pre-line; line-height: 1.6; }
+.rules-paper summary { cursor: pointer; font: 700 .8rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; }
+.rules-paper p { white-space: pre-line; line-height: 1.6; overflow-wrap: anywhere; }
 .empty-case { max-width: 55rem; }
 .closed-stamp { display: inline-block; margin: 1rem 0 2rem; font-size: 1rem; }
 
@@ -158,7 +159,7 @@ h2 { font-size: clamp(2.4rem, 5vw, 5rem); }
   background: var(--red);
   color: #fff8eb;
   text-decoration: none;
-  font: 700 .75rem "Cutive Mono", "Courier New", monospace;
+  font: 700 .75rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   text-transform: uppercase;
   letter-spacing: .07em;
   cursor: pointer;
@@ -182,32 +183,32 @@ h2 { font-size: clamp(2.4rem, 5vw, 5rem); }
   transition: transform .2s ease;
 }
 .team-folder:hover { transform: translateY(-.45rem) rotate(-.25deg); }
-.folder-tab { display: block; width: 48%; padding: .65rem 1rem .4rem; border-radius: .5rem .5rem 0 0; background: #b9a98e; font: 700 .7rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
+.folder-tab { display: block; width: 48%; padding: .65rem 1rem .4rem; border-radius: .5rem .5rem 0 0; background: #b9a98e; font: 700 .7rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; }
 .folder-body { position: relative; display: flex; gap: 1.1rem; min-height: 13rem; padding: 1.6rem; border: 1px solid #a49782; background: linear-gradient(145deg, #daceb7, #bcae94); box-shadow: .7rem .9rem 1.8rem #0006; }
 .team-folder.own .folder-body { background: linear-gradient(145deg, #eee4d0, #c9b898); box-shadow: .7rem .9rem 1.8rem #0008, inset .3rem 0 0 var(--red); }
 .folder-body img, .avatar-placeholder { flex: none; width: 4.5rem; height: 4.5rem; object-fit: cover; filter: grayscale(.7) contrast(1.1); border: .35rem solid #eee5d4; box-shadow: 0 .2rem .5rem #0004; }
-.avatar-placeholder { display: grid; place-items: center; background: #5b574f; color: #e4dac7; font: 700 1.2rem "Cutive Mono", "Courier New", monospace; }
+.avatar-placeholder { display: grid; place-items: center; background: #5b574f; color: #e4dac7; font: 700 1.2rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
 .folder-copy { display: grid; align-content: start; gap: .6rem; min-width: 0; }
-.folder-copy strong { font-size: 1.45rem; line-height: 1; overflow-wrap: anywhere; }
-.folder-copy small { color: #665f53; font: .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
+.folder-copy strong { display: -webkit-box; overflow: hidden; font-size: 1.45rem; line-height: 1.15; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.folder-copy small { color: #665f53; font: .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; overflow-wrap: anywhere; }
 .folder-copy > span { display: -webkit-box; overflow: hidden; color: #514b42; line-height: 1.45; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .eligibility { position: absolute; right: 1rem; bottom: 1rem; color: #6d2925; border-color: #7b3b35; font-size: .6rem; }
 .eligibility.approved { color: #365a3e; border-color: #42664a; }
 .empty-row, .guest-profile { padding: 3rem; border: 1px dashed #666157; color: #aaa294; }
-.empty-row span { font: 700 .8rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
+.empty-row span { font: 700 .8rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; }
 .section-note { max-width: 28rem; margin: 0; color: #aaa294; font-size: .9rem; }
 
 .profile-section { color: var(--ink); background: var(--paper-dark); }
 .profile-section .eyebrow { color: #6f211d; }
 .profile-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(18rem, .8fr); gap: clamp(2rem, 6vw, 6rem); }
 .profile-card { display: grid; grid-template-columns: minmax(8rem, .45fr) 1fr; gap: 2rem; padding: 1.6rem; background: var(--paper); box-shadow: var(--shadow); transform: rotate(-.35deg); }
-.portrait-placeholder { display: grid; place-items: end start; min-height: 15rem; padding: 1rem; overflow: hidden; background: #44423e; color: #ddd1bd; filter: grayscale(1); font: 700 .75rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; word-break: break-all; }
+.portrait-placeholder { display: grid; place-items: end start; min-height: 15rem; padding: 1rem; overflow: hidden; background: #44423e; color: #ddd1bd; filter: grayscale(1); font: 700 .75rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; word-break: break-all; }
 dl { margin: 0; }
-dt { margin-top: 1rem; color: #756c5e; font: 700 .68rem "Cutive Mono", "Courier New", monospace; letter-spacing: .08em; text-transform: uppercase; }
-dd { margin: .25rem 0; font-size: 1.08rem; }
+dt { margin-top: 1rem; color: #756c5e; font: 700 .68rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; letter-spacing: .08em; text-transform: uppercase; }
+dd { margin: .25rem 0; font-size: 1.08rem; overflow-wrap: anywhere; }
 .profile-actions { display: grid; align-content: start; gap: 1.3rem; }
 .paper-form { display: grid; gap: 1rem; }
-.paper-form label { display: grid; gap: .35rem; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
+.paper-form label { display: grid; gap: .35rem; font: 700 .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; }
 .paper-form input, .paper-form textarea, .paper-form select { width: 100%; border: 0; border-bottom: 1px solid #756d60; padding: .65rem .2rem; color: var(--ink); background: transparent; }
 .paper-form button:not(.text-button) { justify-self: start; border: 0; padding: .85rem 1rem; background: var(--ink); color: var(--paper-light); cursor: pointer; }
 .text-button { border: 0; padding: .3rem; color: inherit; background: transparent; text-decoration: underline; cursor: pointer; }
@@ -227,7 +228,7 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .dialog-close { position: absolute; top: .8rem; right: 1rem; border: 0; color: #584f44; background: transparent; font-size: 2rem; cursor: pointer; }
 .auth-dossier h2 { font-size: clamp(2rem, 7vw, 3.6rem); }
 .auth-tabs { display: flex; margin: 1.5rem 0; border-bottom: 1px solid #8c8272; }
-.auth-tabs button { flex: 1; padding: .75rem; border: 0; color: #736a5d; background: transparent; font: 700 .75rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; cursor: pointer; }
+.auth-tabs button { flex: 1; padding: .75rem; border: 0; color: #736a5d; background: transparent; font: 700 .75rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; cursor: pointer; }
 .auth-tabs button[aria-selected="true"] { color: var(--ink); box-shadow: inset 0 -.2rem var(--red); }
 .auth-panel[hidden] { display: none; }
 
@@ -240,19 +241,20 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
   box-shadow: var(--shadow);
 }
 .dossier > article, .dossier > section { margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid var(--line); }
-.dossier h1 { margin-bottom: 1.5rem; font-size: clamp(2.5rem, 7vw, 5.5rem); }
+.dossier h1 { max-width: none; margin-bottom: 1.5rem; font-size: clamp(2.5rem, 7vw, 5.5rem); }
 .dossier h2 { margin: 1.5rem 0 1rem; font-size: clamp(1.6rem, 4vw, 2.7rem); }
 .dossier form { display: grid; gap: .85rem; margin: 1rem 0; }
-.dossier label { display: grid; gap: .35rem; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
+.dossier label { display: grid; gap: .35rem; font: 700 .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; }
 .dossier input, .dossier textarea, .dossier select { width: 100%; padding: .7rem; border: 1px solid #837968; color: var(--ink); background: var(--paper-light); }
 .dossier button { justify-self: start; padding: .72rem 1rem; border: 0; color: var(--paper-light); background: var(--ink); cursor: pointer; }
-.dossier button[data-bump-action] { padding: .45rem .85rem; border: .14rem double #b14a42; color: var(--red); background: transparent; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; transform: rotate(-2.5deg); transition: transform .15s ease, background .15s ease, color .15s ease; }
+.dossier button[data-bump-action] { padding: .45rem .85rem; border: .14rem double #b14a42; color: var(--red); background: transparent; font: 700 .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; transform: rotate(-2.5deg); transition: transform .15s ease, background .15s ease, color .15s ease; }
 .dossier button[data-bump-action]:hover:not(:disabled) { background: var(--red); color: #fff8eb; transform: rotate(0deg); }
 .dossier button[data-bump-action]:disabled { opacity: .55; cursor: default; }
 .dossier img { max-width: 100%; object-fit: cover; filter: grayscale(.5); }
 .dossier li { margin: .8rem 0; }
 .dossier li form { display: inline-block; margin: .25rem; }
-.product-copy { white-space: pre-wrap; line-height: 1.65; }
+.product-copy { white-space: pre-wrap; line-height: 1.65; overflow-wrap: anywhere; }
+.team-description { white-space: pre-line; line-height: 1.6; overflow-wrap: anywhere; }
 .product-index { display: grid; gap: 1.2rem; }
 .product-index > article { padding: 1.2rem; border: 1px solid var(--line); background: #f2e9d8; }
 .product-index h2 { margin-top: 0; }
@@ -267,9 +269,10 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .ballot-option:has(input:disabled) { opacity: .62; }
 .jam-dates { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 1.5rem 0; }
 .archive-index, .result-list, .winner-list { display: grid; gap: 1rem; }
-.archive-index > article, .nomination-result, .winner-card { padding: 1.2rem; border: 1px solid var(--line); background: #f2e9d8; }
+.archive-index > article, .nomination-result, .winner-card { padding: 1.2rem; border: 1px solid var(--line); background: #f2e9d8; color: var(--ink); }
 .winner-list { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
 .winner-stamp { display: inline-block; padding: .3rem .5rem; border: 2px solid var(--red); color: var(--red); font-size: .7rem; font-weight: 700; text-transform: uppercase; transform: rotate(-1deg); }
+.paper-card p, .paper-card h3, .paper-card h4, .winner-card p, .winner-card h4 { overflow-wrap: anywhere; }
 
 @media (max-width: 760px) {
   .site-mark { position: absolute; }
@@ -297,35 +300,35 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 /* Темы-карточки */
 .theme-cards { counter-reset: theme-index; display: flex; flex-wrap: wrap; gap: 1rem; max-width: 64rem; margin-top: 1rem; }
 .theme-card { counter-increment: theme-index; position: relative; flex: 0 1 min(22rem, 100%); padding: 1.1rem 1.3rem 1.5rem; border: 1px solid #a49782; color: var(--ink); background: linear-gradient(145deg, #daceb7, #bcae94); box-shadow: .5rem .6rem 1.2rem #0005; transition: transform .15s ease, box-shadow .15s ease; }
-.theme-card::before { content: "ТЕМА " counter(theme-index, decimal-leading-zero); display: block; margin-bottom: .6rem; color: #6f211d; font: 700 .62rem "Cutive Mono", "Courier New", monospace; letter-spacing: .09em; }
+.theme-card::before { content: "ТЕМА " counter(theme-index, decimal-leading-zero); display: block; margin-bottom: .6rem; color: #6f211d; font: 700 .62rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; letter-spacing: .09em; }
 .theme-card .theme-phrase { display: inline-block; font-size: 1.2rem; line-height: 1.25; color: var(--ink); overflow-wrap: anywhere; }
 .theme-choice-form .theme-card { cursor: pointer; }
 .theme-choice-form .theme-card input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
 .theme-choice-form .theme-card:hover { transform: translateY(-.2rem) rotate(-.5deg); box-shadow: .7rem .85rem 1.5rem #0006; }
 .theme-card.chosen, .theme-choice-form .theme-card:has(input:checked) { border-color: #7b3b35; background: linear-gradient(145deg, #e7ddc7, #cbbc9d); box-shadow: inset .35rem 0 0 #9c322a, .5rem .6rem 1.2rem #0005; }
-.theme-stamp { position: absolute; right: .7rem; bottom: .7rem; padding: .32rem .55rem; border: .14rem double #7b3b35; color: #7b3b35; background: #e9dfc9f0; font: 700 .6rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .08em; transform: rotate(-4deg); white-space: nowrap; }
+.theme-stamp { position: absolute; right: .7rem; bottom: .7rem; padding: .32rem .55rem; border: .14rem double #7b3b35; color: #7b3b35; background: #e9dfc9f0; font: 700 .6rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .08em; transform: rotate(-4deg); white-space: nowrap; }
 .theme-confirm { display: flex; align-items: center; justify-content: space-between; gap: 1rem; max-width: 64rem; margin-top: 1.2rem; }
-.theme-hint { margin: 0; color: #665f53; font: .72rem "Cutive Mono", "Courier New", monospace; }
-.theme-seal { display: none; padding: .8rem 1.2rem; border: .18rem double #7b3b35; color: #7b3b35; background: transparent; box-shadow: .35rem .4rem .9rem #0004; font: 700 .78rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .12em; cursor: pointer; transform: rotate(-2deg); transition: transform .15s ease, background .15s ease; }
+.theme-hint { margin: 0; color: #665f53; font: .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
+.theme-seal { display: none; padding: .8rem 1.2rem; border: .18rem double #7b3b35; color: #7b3b35; background: transparent; box-shadow: .35rem .4rem .9rem #0004; font: 700 .78rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .12em; cursor: pointer; transform: rotate(-2deg); transition: transform .15s ease, background .15s ease; }
 .theme-choice-form:has(input[name="theme_id"]:checked) .theme-hint { display: none; }
 .theme-choice-form:has(input[name="theme_id"]:checked) .theme-seal { display: inline-block; }
 .theme-seal:hover { background: #f1e5dc; transform: rotate(0deg); }
-.theme-ok { max-width: 64rem; margin: .8rem 0 0; padding: .5rem .8rem; border: 1px solid #3c6b45; color: #2f5d3a; background: #e6efdf8c; font: .72rem "Cutive Mono", "Courier New", monospace; }
+.theme-ok { max-width: 64rem; margin: .8rem 0 0; padding: .5rem .8rem; border: 1px solid #3c6b45; color: #2f5d3a; background: #e6efdf8c; font: .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
 
 /* Фиксированный якорь «назад» — слева, всегда на виду */
-.back-anchor { position: fixed; top: .8rem; left: .8rem; z-index: 30; display: inline-block; padding: .55rem .9rem; border: 1px solid #837968; color: var(--ink); background: var(--paper); text-decoration: none; font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; box-shadow: 0 .4rem 1rem #0004; }
+.back-anchor { position: fixed; top: .8rem; left: .8rem; z-index: 30; display: inline-block; padding: .55rem .9rem; border: 1px solid #837968; color: var(--ink); background: var(--paper); text-decoration: none; font: 700 .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; box-shadow: 0 .4rem 1rem #0004; }
 
 /* Автоматически сданный черновик */
-.auto-stamp { align-self: start; justify-self: start; margin: .4rem 0 0; padding: .3rem .5rem; border: 1px solid #7b3b35; color: #6d2925; font: 700 .6rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; }
-.bump-note { margin: .4rem 0 0; color: #665f53; font: .7rem "Cutive Mono", "Courier New", monospace; }
+.auto-stamp { align-self: start; justify-self: start; margin: .4rem 0 0; padding: .3rem .5rem; border: 1px solid #7b3b35; color: #6d2925; font: 700 .6rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; }
+.bump-note { margin: .4rem 0 0; color: #665f53; font: .7rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
 .bump-row { display: flex; align-items: center; flex-wrap: wrap; gap: .9rem; margin-top: .5rem; }
-.bump-counter { display: inline-flex; align-items: baseline; gap: .35rem; margin: 0; color: var(--red); font: 700 1.05rem "Cutive Mono", "Courier New", monospace; }
+.bump-counter { display: inline-flex; align-items: baseline; gap: .35rem; margin: 0; color: var(--red); font: 700 1.05rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
 .bump-counter strong { font-size: 1.3rem; color: var(--ink); }
-.bump-login { font: 700 .72rem "Cutive Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; text-decoration-thickness: .1rem; }
+.bump-login { font: 700 .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: .07em; text-decoration-thickness: .1rem; }
 
 /* Справка «?» */
 /* Мини-кнопка справки «?» рядом с заголовком/личным делом */
-.help-trigger { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 1px solid var(--red); border-radius: 50%; color: var(--red); background: var(--paper); font: 700 .95rem/1 "Cutive Mono", "Courier New", monospace; cursor: pointer; }
+.help-trigger { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 1px solid var(--red); border-radius: 50%; color: var(--red); background: var(--paper); font: 700 .95rem/1 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; cursor: pointer; }
 .help-trigger:hover { background: var(--paper-dark); }
 .help-dossier { width: min(30rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); padding: clamp(1.4rem, 4vw, 2.5rem); border: 0; color: var(--ink); background: var(--paper); box-shadow: var(--shadow); }
 .help-dossier::backdrop { background: #080908d9; backdrop-filter: blur(3px); }
@@ -337,8 +340,8 @@ dd { margin: .25rem 0; font-size: 1.08rem; }
 .help-card h3 { margin: 0 0 .6rem; font-size: 1.15rem; }
 .help-card p { margin: 0; line-height: 1.55; color: #514b42; }
 .help-nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid var(--line); }
-.help-nav button { padding: .4rem .8rem; border: 0; color: var(--ink); background: transparent; font: 700 1.1rem "Cutive Mono", "Courier New", monospace; cursor: pointer; }
-.help-dots { color: #665f53; font: .72rem "Cutive Mono", "Courier New", monospace; }
+.help-nav button { padding: .4rem .8rem; border: 0; color: var(--ink); background: transparent; font: 700 1.1rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; cursor: pointer; }
+.help-dots { color: #665f53; font: .72rem "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
 
 /* Чекбокс согласия с правилами в формах */
 .dossier .rules-confirm { display: flex; align-items: center; gap: .6rem; cursor: pointer; }

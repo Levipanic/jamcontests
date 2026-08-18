@@ -21,7 +21,7 @@
 
 body {
   margin: 0;
-  font: 15px/1.45 "Cutive Mono", "Courier New", monospace;
+  font: 15px/1.45 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace;
   color: var(--ink);
   background: var(--paper);
 }
@@ -102,6 +102,7 @@ a { color: var(--link); }
   text-align: left; vertical-align: top;
   padding: 0.5rem 0.6rem;
   border-bottom: 1px solid var(--line-soft);
+  overflow-wrap: anywhere;
 }
 .admin-table th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); }
 .admin-table tr:last-child td { border-bottom: none; }
@@ -179,7 +180,7 @@ details.admin-collapse-danger > summary { color: var(--red); font-weight: bold; 
 .admin-kv dt { display: inline; color: var(--ink-soft); }
 .admin-kv dd { display: inline; margin: 0 1.2rem 0 0.3rem; }
 .avatar-thumb { max-width: 8rem; max-height: 8rem; border: 1px solid var(--line); }
-pre.admin-json { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.35 "Cutive Mono", "Courier New", monospace; }
+pre.admin-json { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.35 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
 .admin-filter { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; margin: 0.9rem 0; }
 .admin-filter select { padding: 0.35rem 0.5rem; font: inherit; background: var(--panel); border: 1px solid var(--line); }
 /* ---------- audit diff ---------- */
@@ -189,7 +190,7 @@ pre.admin-json { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font
 .admin-audit-diff tr.audit-diff-changed td { background: #fdf1e8; }
 .admin-audit-diff tr.audit-diff-changed td:first-child { color: var(--red); font-weight: bold; }
 
-.admin-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.35 "Cutive Mono", "Courier New", monospace; }
+.admin-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.35 "Cutive Mono", "IBM Plex Mono", "Courier New", monospace; }
 
 /* ---------- control templates ---------- */
 .admin-toolbar { display: flex; gap: 0.9rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 0.9rem; }

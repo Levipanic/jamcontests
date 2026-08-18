@@ -6,7 +6,7 @@
   <meta name="csrf-token" content="{{.CSRFToken}}">
   <meta name="referrer" content="no-referrer">
   <title>{{if .Jam}}{{.Jam.Title}}{{else}}Архив творческих джемов{{end}}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=5">
+  <link rel="stylesheet" href="/static/css/app.css?v=9">
   <script src="/static/js/app.js?v=2" defer></script>
 </head>
 <body data-authenticated="{{if .User}}true{{else}}false{{end}}" data-auth-open="{{if .AuthOpen}}true{{else}}false{{end}}" data-auth-auto-open="{{if .AutoOpenAuth}}true{{else}}false{{end}}" data-auth-mode="{{.AuthMode}}">

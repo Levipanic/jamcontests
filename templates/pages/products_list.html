@@ -1,7 +1,7 @@
 {{define "products_list.html"}}
 <!doctype html><html lang="ru"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="csrf-token" content="{{.CSRFToken}}"><meta name="referrer" content="no-referrer">
-  <title>Продукты: {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css?v=5">
+  <title>Продукты: {{.JamTitle}}</title><link rel="stylesheet" href="/static/css/app.css?v=9">
 </head><body><main class="dossier">
   <a class="back-anchor" href="/jams/{{.PublicJamID}}">← Вернуться к джему</a>
   <article><p class="eyebrow">Раскрытые материалы / джем № {{.PublicJamID}}</p><h1>Продукты</h1>{{template "help_trigger"}}<p>{{.JamTitle}}</p></article>
